@@ -1,21 +1,27 @@
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import './App.css';
-import LandingPage from '../components/LandingPage';
-import ShopPage from '../components/ShopPage';
-import ContactPage from '../components/ContactPage';
-import AboutUsPage from '../components/AboutUs';
-import CheckoutPage from '../components/CheckoutPage';
-import BlogPage from '../components/BlogPage';
-import CreateBlogPost from '../components/CreateBlogPost';
-import BlogPostDetail from '../components/BlogPostDetail';
-import AdminDashboard from '../components/AdminDashboard';
-import EditBlogPost from '../components/EditBlogPost';
-import Login from '../components/Login'; // Fixed casing to match your provided file
+import {
+  BrowserRouter as Router,
+  Route,
+  Routes,
+  Navigate,
+} from "react-router-dom";
+import "./App.css";
+import LandingPage from "../components/LandingPage";
+import ShopPage from "../components/ShopPage";
+import ContactPage from "../components/ContactPage";
+import AboutUsPage from "../components/AboutUs";
+import CheckoutPage from "../components/CheckoutPage";
+import BlogPage from "../components/BlogPage";
+import CreateBlogPost from "../components/CreateBlogPost";
+import BlogPostDetail from "../components/BlogPostDetail";
+import AdminDashboard from "../components/AdminDashboard";
+import EditBlogPost from "../components/EditBlogPost";
+import Login from "../components/login";
+
 
 // ProtectedRoute component to restrict access to admin-only routes
 const ProtectedRoute = ({ children }) => {
-  const isAuthenticated = !!localStorage.getItem('token'); // Check if token exists
-  const isAdmin = localStorage.getItem('isAdmin') === 'true'; // Check if user is admin
+  const isAuthenticated = !!localStorage.getItem("token"); // Check if token exists
+  const isAdmin = localStorage.getItem("isAdmin") === "true"; // Check if user is admin
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -40,7 +46,7 @@ function App() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/blog" element={<BlogPage />} />
         <Route path="/blog/:id" element={<BlogPostDetail />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login></Login>} />
 
         {/* Admin-Only Routes */}
         <Route
