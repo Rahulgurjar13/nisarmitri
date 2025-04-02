@@ -95,7 +95,7 @@ const CheckoutPage = () => {
 
       // Real API call to backend (updated port to 5001)
       const response = await axios.post(
-        "https://backendforshop.onrender.com/api/orders",
+        "http://localhost:5173",
         orderData
       );
 

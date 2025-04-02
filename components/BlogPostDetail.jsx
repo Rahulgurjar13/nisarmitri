@@ -4,7 +4,7 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import axios from 'axios';
 
-const BACKEND_URL = ''; // Proxy handles routing
+const BACKEND_URL = 'https://backendforshop.onrender.com'; // Proxy handles routing
 
 // Reusable Components
 const Button = ({ children, variant = 'primary', onClick, disabled, className = '' }) => {

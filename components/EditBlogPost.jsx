@@ -4,7 +4,7 @@ import Navbar from './Navbar';
 import axios from 'axios';
 import debounce from 'lodash/debounce'; // Install lodash: npm install lodash
 
-const BACKEND_URL = 'http://localhost:5001';
+const BACKEND_URL = 'https://backendforshop.onrender.com';
 
 const EditBlogPost = () => {
   const navigate = useNavigate();

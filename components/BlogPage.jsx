@@ -4,7 +4,7 @@ import axios from 'axios';
 import Navbar from './Navbar';
 import debounce from 'lodash/debounce';
 
-const BACKEND_URL = ''; // Proxy handles routing
+const BACKEND_URL = 'https://backendforshop.onrender.com'; // Proxy handles routing
 
 const fetchPosts = async (setPosts, setLoading, setError) => {
   try {
