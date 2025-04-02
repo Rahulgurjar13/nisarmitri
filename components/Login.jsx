@@ -33,7 +33,7 @@ const Login = () => {
 
     try {
       const response = await axios.post(
-        "http://localhost:5173/api/auth/login",
+        "https://nisarmitri.vercel.app/api/auth/login",
         {
           email,
           password,
