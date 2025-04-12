@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import React, { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import axios from "axios";
 
 // Logo Component
 const GreenoLogo = () => (
@@ -11,31 +11,36 @@ const GreenoLogo = () => (
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true'); // Initial state from localStorage
+  const [isAdmin, setIsAdmin] = useState(
+    localStorage.getItem("isAdmin") === "true"
+  ); // Initial state from localStorage
   const location = useLocation();
   const navigate = useNavigate();
 
   // Check admin status on mount and token change
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (!token) {
       setIsAdmin(false);
       return;
     }
 
     // Update isAdmin based on localStorage initially, then verify with backend
-    setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+    setIsAdmin(localStorage.getItem("isAdmin") === "true");
 
     const checkAdminStatus = async () => {
       try {
-        const response = await axios.get('http://localhost:5001/api/auth/check-admin', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await axios.get(
+          "https://backendforshop.onrender.com/api/auth/check-admin",
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
         const adminStatus = response.data.isAdmin;
         setIsAdmin(adminStatus);
-        localStorage.setItem('isAdmin', adminStatus.toString()); // Sync localStorage with backend
+        localStorage.setItem("isAdmin", adminStatus.toString()); // Sync localStorage with backend
       } catch (error) {
-        console.error('Failed to check admin status:', error);
+        console.error("Failed to check admin status:", error);
         if (error.response?.status === 401 || error.response?.status === 403) {
           handleLogout(); // Auto-logout on token invalidity
         }
@@ -51,19 +56,19 @@ const Navbar = () => {
   }, [location]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('isAdmin');
-    localStorage.removeItem('userName');
+    localStorage.removeItem("token");
+    localStorage.removeItem("isAdmin");
+    localStorage.removeItem("userName");
     setIsAdmin(false);
-    navigate('/login');
+    navigate("/login");
   };
 
   const navItems = [
-    { path: '/', label: 'Home' },
-    { path: '/about', label: 'About Us' },
-    { path: '/shop', label: 'Shop Now' },
-    { path: '/blog', label: 'Blog' },
-    { path: '/contact', label: 'Contact Us' },
+    { path: "/", label: "Home" },
+    { path: "/about", label: "About Us" },
+    { path: "/shop", label: "Shop Now" },
+    { path: "/blog", label: "Blog" },
+    { path: "/contact", label: "Contact Us" },
   ];
 
   return (
@@ -82,7 +87,9 @@ const Navbar = () => {
                 key={path}
                 to={path}
                 className={`relative text-gray-900 text-lg font-medium transition-all duration-300 hover:text-[#2F6844] ${
-                  location.pathname === path ? 'text-[#1A3329] font-semibold' : ''
+                  location.pathname === path
+                    ? "text-[#1A3329] font-semibold"
+                    : ""
                 }`}
               >
                 {label}
@@ -96,25 +103,28 @@ const Navbar = () => {
                 <Link
                   to="/admin"
                   className={`relative text-gray-900 text-lg font-medium transition-all duration-300 hover:text-[#2F6844] ${
-                    location.pathname === '/admin' ? 'text-[#1A3329] font-semibold' : ''
+                    location.pathname === "/admin"
+                      ? "text-[#1A3329] font-semibold"
+                      : ""
                   }`}
                 >
                   Admin
-                  {location.pathname === '/admin' && (
+                  {location.pathname === "/admin" && (
                     <span className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#1A3329]" />
                   )}
                 </Link>
-               
               </>
             ) : (
               <Link
                 to="/login"
                 className={`relative text-gray-900 text-lg font-medium transition-all duration-300 hover:text-[#2F6844] ${
-                  location.pathname === '/login' ? 'text-[#1A3329] font-semibold' : ''
+                  location.pathname === "/login"
+                    ? "text-[#1A3329] font-semibold"
+                    : ""
                 }`}
               >
                 Login
-                {location.pathname === '/login' && (
+                {location.pathname === "/login" && (
                   <span className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#1A3329]" />
                 )}
               </Link>
@@ -129,12 +139,34 @@ const Navbar = () => {
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
                 </svg>
               )}
             </button>
@@ -145,7 +177,9 @@ const Navbar = () => {
       {/* Mobile Navigation Menu with animation */}
       <div
         className={`lg:hidden absolute inset-x-0 z-40 bg-white shadow-lg transition-all duration-300 ease-in-out ${
-          mobileMenuOpen ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+          mobileMenuOpen
+            ? "max-h-[400px] opacity-100"
+            : "max-h-0 opacity-0 overflow-hidden"
         }`}
       >
         <nav className="container mx-auto px-6 py-4 flex flex-col space-y-3 font-serif">
@@ -155,8 +189,8 @@ const Navbar = () => {
               to={path}
               className={`text-gray-900 text-lg font-medium transition-all duration-200 pl-3 py-2 border-l-4 ${
                 location.pathname === path
-                  ? 'border-[#1A3329] text-[#1A3329] bg-gray-100'
-                  : 'border-transparent hover:border-[#2F6844] hover:bg-gray-50'
+                  ? "border-[#1A3329] text-[#1A3329] bg-gray-100"
+                  : "border-transparent hover:border-[#2F6844] hover:bg-gray-50"
               }`}
             >
               {label}
@@ -167,22 +201,21 @@ const Navbar = () => {
               <Link
                 to="/admin"
                 className={`text-gray-900 text-lg font-medium transition-all duration-200 pl-3 py-2 border-l-4 ${
-                  location.pathname === '/admin'
-                    ? 'border-[#1A3329] text-[#1A3329] bg-gray-100'
-                    : 'border-transparent hover:border-[#2F6844] hover:bg-gray-50'
+                  location.pathname === "/admin"
+                    ? "border-[#1A3329] text-[#1A3329] bg-gray-100"
+                    : "border-transparent hover:border-[#2F6844] hover:bg-gray-50"
                 }`}
               >
                 Admin
               </Link>
-              
             </>
           ) : (
             <Link
               to="/login"
               className={`text-gray-900 text-lg font-medium transition-all duration-200 pl-3 py-2 border-l-4 ${
-                location.pathname === '/login'
-                  ? 'border-[#1A3329] text-[#1A3329] bg-gray-100'
-                  : 'border-transparent hover:border-[#2F6844] hover:bg-gray-50'
+                location.pathname === "/login"
+                  ? "border-[#1A3329] text-[#1A3329] bg-gray-100"
+                  : "border-transparent hover:border-[#2F6844] hover:bg-gray-50"
               }`}
             >
               Login
