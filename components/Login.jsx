@@ -33,7 +33,7 @@ const Login = () => {
 
     try {
       const response = await axios.post(
-        "https://nisarmitri.vercel.app/api/auth/login",
+        "https://backendforshop.onrender.com/api/auth/login",
         {
           email,
           password,
