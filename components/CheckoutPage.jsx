@@ -95,7 +95,7 @@ const CheckoutPage = () => {
 
       // Real API call to backend (updated port to 5001)
       const response = await axios.post(
-        "https://nisarmitri.vercel.app/",
+        "https://backendforshop.onrender.com",
         orderData
       );
 
