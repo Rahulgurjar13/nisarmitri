@@ -21,7 +21,7 @@ const Footer = () => {
             <p className="text-gray-300 max-w-xs leading-relaxed">
               Welcome to Nisargmaitri! We promote a deep bond with nature and sustainable practices for a greener future. Join us in making a difference together!
             </p>
-            <div className="flex space-x-4">
+            {/* <div className="flex space-x-4">
               <a href="#" className="bg-[#1D3B30] p-2 rounded-full hover:bg-[#2A5446] transition-colors duration-300">
                 <Facebook size={20} />
               </a>
@@ -34,7 +34,7 @@ const Footer = () => {
               <a href="#" className="bg-[#1D3B30] p-2 rounded-full hover:bg-[#2A5446] transition-colors duration-300">
                 <Linkedin size={20} />
               </a>
-            </div>
+            </div> */}
           </div>
           
           {/* Quick Links */}
@@ -42,7 +42,7 @@ const Footer = () => {
             <h3 className="text-xl font-medium mb-6 relative">
               <span className="after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-12 after:h-1 after:bg-green-500 pb-2">Quick Links</span>
             </h3>
-            <ul className="space-y-3">
+            {/* <ul className="space-y-3">
               {['Home', 'About Us', 'Services', 'Projects', 'Blog', 'Contact'].map((link) => (
                 <li key={link} className="group">
                   <a href="#" className="flex items-center hover:text-green-400 transition-colors duration-300">
@@ -51,7 +51,7 @@ const Footer = () => {
                   </a>
                 </li>
               ))}
-            </ul>
+            </ul> */}
           </div>
           
           {/* Our Services */}
@@ -59,7 +59,7 @@ const Footer = () => {
             <h3 className="text-xl font-medium mb-6 relative">
               <span className="after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-12 after:h-1 after:bg-green-500 pb-2">Our Services</span>
             </h3>
-            <ul className="space-y-3">
+            {/* <ul className="space-y-3">
               {['Waste Management', 'Eco Consulting', 'Green Workshops', 'Sustainability Plans', 'Environmental Education'].map((service) => (
                 <li key={service} className="group">
                   <a href="#" className="flex items-center hover:text-green-400 transition-colors duration-300">
@@ -68,7 +68,7 @@ const Footer = () => {
                   </a>
                 </li>
               ))}
-            </ul>
+            </ul> */}
           </div>
           
           {/* Contact Information */}
@@ -97,18 +97,20 @@ const Footer = () => {
           </div>
         </div>
         
-       
-        
         {/* Divider */}
         <div className="h-px bg-[#2A5446] my-12"></div>
         
-        {/* Copyright */}
+        {/* Copyright, Website Credit, Terms, and Privacy (Left-Right Positioning) */}
         <div className="flex flex-col md:flex-row justify-between items-center text-gray-400">
           <div>
             Nisarg Maitri © 2025. All Rights Reserved.
           </div>
-          <div className="mt-4 md:mt-0">
-            Website Crafted with 💚 by <a href="#" className="text-green-400 hover:underline">Rahul Gurjar</a>
+          <div className="mt-4 md:mt-0 flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-4">
+            <span>Website Crafted with 💚 by <a href="#" className="text-green-400 hover:underline">Rahul Gurjar</a></span>
+            <span>|</span>
+            <a href="/terms-condition" className="text-green-400 hover:underline">Terms and Conditions</a>
+            <span>|</span>
+            <a href="/privacy" className="text-green-400 hover:underline">Privacy Policy</a>
           </div>
         </div>
       </div>

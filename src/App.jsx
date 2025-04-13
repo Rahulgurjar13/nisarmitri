@@ -16,6 +16,8 @@ import BlogPostDetail from "../components/BlogPostDetail";
 import AdminDashboard from "../components/AdminDashboard";
 import EditBlogPost from "../components/EditBlogPost";
 import Login from "../components/Login.jsx"; // Updated import: Capital "L" and explicit .jsx
+import PrivacyPolicy from "../components/PrivacyPolicy.jsx";
+import TermsAndConditions from "../components/TermsAndConditions.jsx";
 
 // ProtectedRoute component to restrict access to admin-only routes
 const ProtectedRoute = ({ children }) => {
@@ -43,7 +45,9 @@ function App() {
         <Route path="/about" element={<AboutUsPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/blog" element={<BlogPage />} />
+        <Route path="/privacy" element={<PrivacyPolicy/>} />
+        <Route path="/terms-condition" element={<TermsAndConditions />} />
+        {/* <Route path="/blog" element={<BlogPage />} /> */}
         <Route path="/blog/:id" element={<BlogPostDetail />} />
         <Route path="/login" element={<Login />} /> {/* Removed redundant <Login></Login> syntax */}
 
