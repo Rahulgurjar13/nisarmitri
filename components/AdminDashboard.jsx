@@ -6,7 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import debounce from "lodash/debounce";
 
-const BACKEND_URL = "http://localhost:5001";
+const BACKEND_URL = "https://backendforshop.onrender.com";
 
 const OrderRow = ({ order, onViewDetails }) => {
   const formatDate = (dateString) => {

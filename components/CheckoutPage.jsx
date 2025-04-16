@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Footer from './Footer';
 
-const BACKEND_URL = 'http://localhost:5001';
+const BACKEND_URL = 'https://backendforshop.onrender.com';
 
 const CheckoutPage = () => {
   const location = useLocation();

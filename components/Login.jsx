@@ -3,7 +3,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./Navbar";
 
-const BACKEND_URL = "http://localhost:5001";
+const BACKEND_URL = "https://backendforshop.onrender.com";
 
 const Login = () => {
   const [email, setEmail] = useState("");

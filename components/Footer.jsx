@@ -4,7 +4,7 @@ import { MapPin, Phone, Mail, Clock } from 'lucide-react';
 // Logo SVG Component for Footer
 const NisargmaitriLogo = () => (
   <div className="flex items-center">
-    <img src="/public/logo.png" className="h-12" alt="Nisargmaitri Logo" />
+    <img src="/nisargmaitri.png" className="h-12" alt="Nisargmaitri Logo" />
     <span className="ml-3 text-xl font-bold tracking-wider">NISARGMAITRI</span>
   </div>
 );
