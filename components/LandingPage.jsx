@@ -42,7 +42,7 @@ const LandingPage = () => {
       id: 1,
       name: 'Bamboo Toothbrush',
       description: 'Eco-friendly bamboo toothbrush with soft bristles, perfect for everyday use.',
-      price: 149,
+      price: 40,
       image: '/toothbrush.png',
       category: 'Bamboo',
       tag: 'Bestseller'
@@ -51,7 +51,7 @@ const LandingPage = () => {
       id: 4,
       name: 'Menstrual Cup',
       description: 'Reusable silicone menstrual cup, eco-friendly alternative to disposable products.',
-      price: 599,
+      price: 299,
       image: '/cup.png',
       category: 'Menstrual',
       tag: 'Popular'
@@ -60,7 +60,7 @@ const LandingPage = () => {
       id: 3,
       name: 'Bamboo Razor',
       description: 'Sustainable bamboo razor with replaceable stainless steel blades.',
-      price: 349,
+      price: 199,
       image: '/BAmboo (2).png',
       category: 'Bamboo'
     }
