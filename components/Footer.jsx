@@ -54,7 +54,8 @@ const Footer = () => {
             <ul className="space-y-4">
               <li className="flex items-start">
                 <MapPin size={20} className="mt-1 mr-3 text-[#6AAF8D] flex-shrink-0" />
-                <span>Greater Noida, Uttar Pradesh, India</span>
+                <span>IND-110, Parsvnath Edens, Sector Alpha-2,
+                Greater Noida, Uttar Pradesh -201306 </span>
               </li>
               <li className="flex items-center">
                 <Phone size={20} className="mr-3 text-[#6AAF8D] flex-shrink-0" />
