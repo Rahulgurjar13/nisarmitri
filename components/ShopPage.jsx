@@ -230,7 +230,7 @@ const ShopPage = () => {
         id: 1,
         name: 'Bamboo Toothbrush',
         description: 'Eco-friendly bamboo toothbrush with soft bristles, perfect for everyday use.',
-        price: 149,
+        price: 40,
         image: '/toothbrush.png',
         category: 'Bamboo',
         tag: 'Bestseller'
@@ -239,7 +239,7 @@ const ShopPage = () => {
         id: 2,
         name: 'Bamboo Tongue Cleaner',
         description: 'Natural bamboo tongue cleaner for improved oral hygiene.',
-        price: 99,
+        price: 40,
         image: '/tongue_cleaner.png',
         category: 'Bamboo'
       },
@@ -247,7 +247,7 @@ const ShopPage = () => {
         id: 3,
         name: 'Bamboo Razor',
         description: 'Sustainable bamboo razor with replaceable stainless steel blades.',
-        price: 349,
+        price: 199,
         image: '/BAmboo (2).png',
         category: 'Bamboo'
       },
@@ -255,7 +255,7 @@ const ShopPage = () => {
         id: 4,
         name: 'Menstrual Cup',
         description: 'Reusable silicone menstrual cup, eco-friendly alternative to disposable products.',
-        price: 599,
+        price: 299,
         image: '/cup.png',
         category: 'Menstrual',
         tag: 'Popular'
@@ -264,15 +264,15 @@ const ShopPage = () => {
         id: 5,
         name: 'Bamboo Straws (Set of 6)',
         description: 'Reusable bamboo drinking straws with cleaning brush included.',
-        price: 199,
+        price: 40,
         image: '/BAmboo (1).png',
         category: 'Bamboo'
       },
       {
         id: 6,
-        name: 'Steel Tumbler',
+        name: 'Collapsible Steel Cup',
         description: 'Double-walled stainless steel tumbler for hot and cold beverages.',
-        price: 699,
+        price: 199,
         image: '/tumbler.png',
         category: 'Steel'
       },
@@ -280,15 +280,15 @@ const ShopPage = () => {
         id: 7,
         name: 'Reusable Makeup Remover Pads',
         description: 'Soft cotton reusable makeup remover pads with washing bag, pack of 8.',
-        price: 249,
-        image: '/BAmboo (2).png',
+        price: 70,
+        image: '/makeupremove.jpeg',
         category: 'Zero Waste'
       },
       {
         id: 8,
         name: 'Steel Water Bottle',
         description: 'Stainless steel water bottle with leak-proof lid, 750ml capacity.',
-        price: 799,
+        price: 250,
         image: '/Untitled design (35).png',
         category: 'Steel',
         tag: 'New'
@@ -305,7 +305,7 @@ const ShopPage = () => {
         id: 10,
         name: 'Zero Waste Cutlery Set',
         description: 'Portable bamboo cutlery set with knife, fork, spoon, chopsticks and straw in cotton pouch.',
-        price: 399,
+        price: 199,
         image: '/cutlery_set.png',
         category: 'Zero Waste'
       }
