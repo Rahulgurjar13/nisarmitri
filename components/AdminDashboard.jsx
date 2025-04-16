@@ -6,7 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import debounce from "lodash/debounce";
 
-const BACKEND_URL = "https://backendforshop.onrender.com";
+const BACKEND_URL = "http://localhost:5001";
 
 const OrderRow = ({ order, onViewDetails }) => {
   const formatDate = (dateString) => {
@@ -40,60 +40,6 @@ const OrderRow = ({ order, onViewDetails }) => {
   );
 };
 
-const BlogPostRow = ({ post, onEdit, onDelete }) => {
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
-  return (
-    <tr className="border-b hover:bg-gray-50 transition-colors duration-200">
-      <td className="py-4 px-6">
-        <div className="flex items-center">
-          <img
-            src={
-              post.coverImage
-                ? `${BACKEND_URL}${post.coverImage}`
-                : `${BACKEND_URL}/uploads/placeholder.jpg`
-            }
-            alt={post.title}
-            className="w-12 h-12 object-cover rounded mr-4"
-            onError={(e) => {
-              console.error("Image failed to load:", e.target.src);
-              e.target.src = `${BACKEND_URL}/uploads/placeholder.jpg`;
-              e.target.onError = null;
-            }}
-          />
-          <span className="text-gray-900 font-medium">{post.title}</span>
-        </div>
-      </td>
-      <td className="py-4 px-6 text-gray-600">{post.category}</td>
-      <td className="py-4 px-6 text-gray-600">{formatDate(post.date)}</td>
-      <td className="py-4 px-6 text-gray-600">{post.author.name}</td>
-      <td className="py-4 px-6 text-gray-600">{post.readTime} min</td>
-      <td className="py-4 px-6">
-        <div className="flex space-x-4">
-          <button
-            onClick={() => onEdit(post)}
-            className="text-[#1A3329] hover:text-[#2F6844] font-medium"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(post._id)}
-            className="text-red-600 hover:text-red-800 font-medium"
-          >
-            Delete
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-};
-
 const EmptyState = ({ message }) => (
   <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
     <svg
@@ -115,8 +61,6 @@ const EmptyState = ({ message }) => (
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("posts");
-  const [posts, setPosts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -143,17 +87,11 @@ const AdminDashboard = () => {
 
       setLoading(true);
       try {
-        console.log("Fetching data with token:", token);
-        const [postsResponse, ordersResponse] = await Promise.all([
-          axios.get(`${BACKEND_URL}/api/posts`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${BACKEND_URL}/api/orders`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
+        console.log("Fetching orders with token:", token);
+        const ordersResponse = await axios.get(`${BACKEND_URL}/api/orders`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (mounted) {
-          setPosts(postsResponse.data);
           setOrders(ordersResponse.data);
           setFilteredOrders(ordersResponse.data);
           setError(null);
@@ -173,7 +111,6 @@ const AdminDashboard = () => {
             stableNavigate("/login");
           } else {
             setError("Failed to load data. Please try again later.");
-            setPosts([]);
             setOrders([]);
             setFilteredOrders([]);
           }
@@ -228,31 +165,12 @@ const AdminDashboard = () => {
   );
 
   useEffect(() => {
+    debouncedHandleFilterOrders();
     return () => {
       debouncedHandleFilterOrders.cancel();
     };
-  }, [debouncedHandleFilterOrders]);
+  }, [startDate, endDate, debouncedHandleFilterOrders]);
 
-  const handleCreatePost = () => stableNavigate("/create-blog-post");
-  const handleEditPost = (post) =>
-    stableNavigate(`/edit-blog-post/${post._id}`, { state: { post } });
-  const handleDeletePost = async (postId) => {
-    if (!window.confirm("Are you sure you want to delete this post?")) return;
-
-    try {
-      await axios.delete(`${BACKEND_URL}/api/posts/${postId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setPosts(posts.filter((post) => post._id !== postId));
-    } catch (error) {
-      console.error(
-        "Delete post error:",
-        error.response?.status,
-        error.response?.data || error.message
-      );
-      setError("Failed to delete post");
-    }
-  };
   const handleViewOrderDetails = (order) => setSelectedOrder(order);
 
   const handleLogout = () => {
@@ -404,66 +322,15 @@ const AdminDashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-4 md:mb-0">
-            Admin Dashboard
+            Admin Dashboard - Orders
           </h1>
-          <div className="flex space-x-4">
-            {activeTab === "posts" && (
-              <button
-                onClick={handleCreatePost}
-                className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-5 py-2 rounded-md transition-colors duration-300 inline-flex items-center"
-                disabled={loading}
-              >
-                <svg
-                  className="h-5 w-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
-                Create New Post
-              </button>
-            )}
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-md transition-colors duration-300"
-              disabled={loading}
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-6">
-          <div className="flex space-x-4 border-b border-gray-200">
-            <button
-              onClick={() => setActiveTab("posts")}
-              className={`py-2 px-4 text-sm font-medium ${
-                activeTab === "posts"
-                  ? "border-b-2 border-[#1A3329] text-[#1A3329]"
-                  : "text-gray-600"
-              }`}
-              disabled={loading}
-            >
-              Blog Posts
-            </button>
-            <button
-              onClick={() => setActiveTab("orders")}
-              className={`py-2 px-4 text-sm font-medium ${
-                activeTab === "orders"
-                  ? "border-b-2 border-[#1A3329] text-[#1A3329]"
-                  : "text-gray-600"
-              }`}
-              disabled={loading}
-            >
-              Orders
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-md transition-colors duration-300"
+            disabled={loading}
+          >
+            Logout
+          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -494,45 +361,6 @@ const AdminDashboard = () => {
                 </button>
               )}
             </div>
-          ) : activeTab === "posts" ? (
-            posts.length > 0 ? (
-              <table className="min-w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                      Title
-                    </th>
-                    <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                      Category
-                    </th>
-                    <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                      Date
-                    </th>
-                    <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                      Author
-                    </th>
-                    <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                      Read Time
-                    </th>
-                    <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {posts.map((post) => (
-                    <BlogPostRow
-                      key={post._id}
-                      post={post}
-                      onEdit={handleEditPost}
-                      onDelete={handleDeletePost}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <EmptyState message="No Posts Found" />
-            )
           ) : (
             <>
               {!selectedOrder ? (

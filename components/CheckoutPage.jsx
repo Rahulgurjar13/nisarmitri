@@ -1,7 +1,9 @@
-import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import axios from "axios";
-import Footer from "./Footer";
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import Footer from './Footer';
+
+const BACKEND_URL = 'http://localhost:5001';
 
 const CheckoutPage = () => {
   const location = useLocation();
@@ -11,32 +13,52 @@ const CheckoutPage = () => {
   const [step, setStep] = useState(1);
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
-    customer: { firstName: "", lastName: "", email: "", phone: "" },
+    customer: { firstName: '', lastName: '', email: '', phone: '' },
     shippingAddress: {
-      address1: "",
-      address2: "",
-      city: "",
-      state: "Uttar Pradesh",
-      pincode: "201310",
-      country: "India",
+      address1: '',
+      address2: '',
+      city: '',
+      state: 'Uttar Pradesh',
+      pincode: '201310',
+      country: 'India',
     },
-    shippingMethod: { type: "Standard", cost: 160 },
-    coupon: { code: "", discount: 0 },
+    shippingMethod: { type: 'Standard', cost: 160 },
+    coupon: { code: '', discount: 0 },
     gstDetails: {
-      gstNumber: "",
-      state: "Uttar Pradesh",
-      city: "Gautam Buddha Nagar",
+      gstNumber: '',
+      state: 'Uttar Pradesh',
+      city: 'Gautam Buddha Nagar',
     },
-    paymentMethod: "UPI",
+    paymentMethod: 'UPI',
   });
-  const [stateSearch, setStateSearch] = useState("");
+  const [stateSearch, setStateSearch] = useState('');
   const [showStateSuggestions, setShowStateSuggestions] = useState(false);
+
+  // Load Razorpay SDK
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  // Redirect to cart if empty
+  useEffect(() => {
+    if (!cartItems || cartItems.length === 0) {
+      navigate('/shop');
+    }
+  }, [cartItems, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const path = name.split(".");
+    const path = name.split('.');
 
+    setError(null); // Clear error on input change
     if (path.length > 1) {
       setFormData((prev) => ({
         ...prev,
@@ -48,25 +70,57 @@ const CheckoutPage = () => {
   };
 
   const applyCoupon = () => {
-    if (formData.coupon.code.toUpperCase() === "FREESHIPPING") {
+    if (formData.coupon.code.toUpperCase() === 'FREESHIPPING') {
       setFormData((prev) => ({
         ...prev,
         shippingMethod: { ...prev.shippingMethod, cost: 0 },
-        coupon: { code: "FREESHIPPING", discount: 160 },
+        coupon: { code: 'FREESHIPPING', discount: 160 },
       }));
+      setError(null);
     } else {
       setFormData((prev) => ({
         ...prev,
         shippingMethod: { ...prev.shippingMethod, cost: 160 },
         coupon: { code: prev.coupon.code, discount: 0 },
       }));
-      alert("Invalid coupon code");
+      setError('Invalid coupon code');
     }
+  };
+
+  const handleStep1Submit = (e) => {
+    e.preventDefault();
+    const { customer, shippingAddress } = formData;
+
+    // Enhanced validation
+    if (!cartItems.length) {
+      setError('Your cart is empty');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
+      setError('Please enter a valid email');
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(customer.phone)) {
+      setError('Please enter a valid 10-digit phone number');
+      return;
+    }
+    if (!/^[0-9]{6}$/.test(shippingAddress.pincode)) {
+      setError('Please enter a valid 6-digit pincode');
+      return;
+    }
+    if (!shippingAddress.address1 || !shippingAddress.city || !shippingAddress.state) {
+      setError('Please fill all required shipping address fields');
+      return;
+    }
+
+    setError(null);
+    setStep(2);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     try {
       const items = cartItems.map((item) => ({
@@ -74,7 +128,7 @@ const CheckoutPage = () => {
         name: item.name,
         quantity: item.quantity,
         price: item.price,
-        variant: item.variant || "",
+        variant: item.variant || '',
       }));
 
       const subtotal = cartItems.reduce(
@@ -93,47 +147,65 @@ const CheckoutPage = () => {
         total,
       };
 
-      // Real API call to backend (updated port to 5001)
+      // Create order
       const response = await axios.post(
-        "https://backendforshop.onrender.com",
+        `${BACKEND_URL}/api/orders`,
         orderData
       );
 
       setOrder(response.data.order);
 
-      if (formData.paymentMethod !== "COD") {
+      if (formData.paymentMethod !== 'COD') {
         const options = {
-          key: process.env.REACT_APP_RAZORPAY_KEY_ID || "mock_key",
+          key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'your_razorpay_key_id',
           amount: response.data.order.total * 100,
-          currency: "INR",
-          name: "EcoShop",
+          currency: 'INR',
+          name: 'NISARGMAITRI',
           order_id: response.data.razorpayOrder?.id,
-          handler: async function (response) {
-            // Optionally verify payment with backend here
-            setStep(3);
+          handler: async function (paymentResponse) {
+            try {
+              // Verify payment
+              const verifyResponse = await axios.post(
+                `${BACKEND_URL}/api/orders/verify-payment`,
+                {
+                  razorpay_order_id: paymentResponse.razorpay_order_id,
+                  razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                  razorpay_signature: paymentResponse.razorpay_signature,
+                  orderId: response.data.order.orderId,
+                }
+              );
+              setOrder(verifyResponse.data.order);
+              setStep(3);
+            } catch (error) {
+              console.error('Payment verification failed:', error.response?.data || error.message);
+              setError('Payment verification failed. Please contact support.');
+            }
           },
           prefill: {
             name: `${formData.customer.firstName} ${formData.customer.lastName}`,
             email: formData.customer.email,
             contact: formData.customer.phone,
           },
-          theme: { color: "#1A3329" },
+          theme: { color: '#1A3329' },
         };
 
         const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (response) {
+          setError('Payment failed. Please try again.');
+        });
         rzp.open();
       } else {
         setStep(3);
       }
     } catch (error) {
-      console.error("Order failed:", error);
-      alert("Order failed. Please try again.");
+      console.error('Order failed:', error.response?.data || error.message);
+      setError(error.response?.data?.error || 'Order failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBackToCart = () => navigate("/shop");
+  const handleBackToCart = () => navigate('/shop');
 
   const handleStateSearch = (e) => {
     setStateSearch(e.target.value);
@@ -163,42 +235,42 @@ const CheckoutPage = () => {
   const total = subtotal + shippingCost + tax;
 
   const indianStates = [
-    "Andaman and Nicobar Islands",
-    "Andhra Pradesh",
-    "Arunachal Pradesh",
-    "Assam",
-    "Bihar",
-    "Chandigarh",
-    "Chhattisgarh",
-    "Dadra and Nagar Haveli and Daman and Diu",
-    "Delhi",
-    "Goa",
-    "Gujarat",
-    "Haryana",
-    "Himachal Pradesh",
-    "Jammu and Kashmir",
-    "Jharkhand",
-    "Karnataka",
-    "Kerala",
-    "Ladakh",
-    "Lakshadweep",
-    "Madhya Pradesh",
-    "Maharashtra",
-    "Manipur",
-    "Meghalaya",
-    "Mizoram",
-    "Nagaland",
-    "Odisha",
-    "Puducherry",
-    "Punjab",
-    "Rajasthan",
-    "Sikkim",
-    "Tamil Nadu",
-    "Telangana",
-    "Tripura",
-    "Uttar Pradesh",
-    "Uttarakhand",
-    "West Bengal",
+    'Andaman and Nicobar Islands',
+    'Andhra Pradesh',
+    'Arunachal Pradesh',
+    'Assam',
+    'Bihar',
+    'Chandigarh',
+    'Chhattisgarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi',
+    'Goa',
+    'Gujarat',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jammu and Kashmir',
+    'Jharkhand',
+    'Karnataka',
+    'Kerala',
+    'Ladakh',
+    'Lakshadweep',
+    'Madhya Pradesh',
+    'Maharashtra',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Odisha',
+    'Puducherry',
+    'Punjab',
+    'Rajasthan',
+    'Sikkim',
+    'Tamil Nadu',
+    'Telangana',
+    'Tripura',
+    'Uttar Pradesh',
+    'Uttarakhand',
+    'West Bengal',
   ];
 
   const filteredStates = indianStates.filter((state) =>
@@ -208,12 +280,13 @@ const CheckoutPage = () => {
   return (
     <div className="bg-gray-50 min-h-screen font-serif">
       {/* Header */}
-      <div className="bg-[#1A3329] text-white p-4 shadow-md">
+      <header className="bg-[#1A3329] text-white p-4 shadow-md">
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold">NISARGMAITRI</h1>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate('/')}
             className="flex items-center text-sm hover:underline"
+            aria-label="Continue Shopping"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -221,6 +294,7 @@ const CheckoutPage = () => {
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -232,22 +306,23 @@ const CheckoutPage = () => {
             Continue Shopping
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Checkout Progress */}
-      <div className="container mx-auto px-4 sm:px-6 py-8">
+      <main className="container mx-auto px-4 sm:px-6 py-8">
         <div className="flex justify-center mb-8">
           <div className="w-full max-w-3xl flex items-center">
             <div
               className={`flex flex-col items-center ${
-                step >= 1 ? "text-[#1A3329]" : "text-gray-400"
+                step >= 1 ? 'text-[#1A3329]' : 'text-gray-400'
               }`}
+              aria-current={step === 1 ? 'step' : undefined}
             >
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center border-2 mb-2 ${
                   step >= 1
-                    ? "bg-[#1A3329] text-white border-[#1A3329]"
-                    : "border-gray-300"
+                    ? 'bg-[#1A3329] text-white border-[#1A3329]'
+                    : 'border-gray-300'
                 }`}
               >
                 1
@@ -256,19 +331,20 @@ const CheckoutPage = () => {
             </div>
             <div
               className={`flex-1 h-1 mx-2 ${
-                step >= 2 ? "bg-[#1A3329]" : "bg-gray-300"
+                step >= 2 ? 'bg-[#1A3329]' : 'bg-gray-300'
               }`}
             ></div>
             <div
               className={`flex flex-col items-center ${
-                step >= 2 ? "text-[#1A3329]" : "text-gray-400"
+                step >= 2 ? 'text-[#1A3329]' : 'text-gray-400'
               }`}
+              aria-current={step === 2 ? 'step' : undefined}
             >
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center border-2 mb-2 ${
                   step >= 2
-                    ? "bg-[#1A3329] text-white border-[#1A3329]"
-                    : "border-gray-300"
+                    ? 'bg-[#1A3329] text-white border-[#1A3329]'
+                    : 'border-gray-300'
                 }`}
               >
                 2
@@ -277,19 +353,20 @@ const CheckoutPage = () => {
             </div>
             <div
               className={`flex-1 h-1 mx-2 ${
-                step >= 3 ? "bg-[#1A3329]" : "bg-gray-300"
+                step >= 3 ? 'bg-[#1A3329]' : 'bg-gray-300'
               }`}
             ></div>
             <div
               className={`flex flex-col items-center ${
-                step >= 3 ? "text-[#1A3329]" : "text-gray-400"
+                step >= 3 ? 'text-[#1A3329]' : 'text-gray-400'
               }`}
+              aria-current={step === 3 ? 'step' : undefined}
             >
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center border-2 mb-2 ${
                   step >= 3
-                    ? "bg-[#1A3329] text-white border-[#1A3329]"
-                    : "border-gray-300"
+                    ? 'bg-[#1A3329] text-white border-[#1A3329]'
+                    : 'border-gray-300'
                 }`}
               >
                 3
@@ -300,68 +377,91 @@ const CheckoutPage = () => {
         </div>
 
         <div className="max-w-6xl mx-auto">
+          {/* Error Message */}
+          {error && (
+            <div
+              className="mb-6 p-4 bg-red-100 text-red-700 rounded-md"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
+
           {/* Step 1: Billing Information */}
           {step === 1 && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
+              <section className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-3 border-b border-gray-200">
                   Billing Information
                 </h2>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setStep(2);
-                  }}
-                  className="space-y-6"
-                >
+                <form onSubmit={handleStep1Submit} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                      <label
+                        htmlFor="firstName"
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                      >
                         First Name*
                       </label>
                       <input
+                        id="firstName"
                         type="text"
                         name="customer.firstName"
                         value={formData.customer.firstName}
                         onChange={handleChange}
                         required
                         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                        aria-required="true"
                       />
                     </div>
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                      <label
+                        htmlFor="lastName"
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                      >
                         Last Name*
                       </label>
                       <input
+                        id="lastName"
                         type="text"
                         name="customer.lastName"
                         value={formData.customer.lastName}
                         onChange={handleChange}
                         required
                         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                        aria-required="true"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                    <label
+                      htmlFor="email"
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                    >
                       Email*
                     </label>
                     <input
+                      id="email"
                       type="email"
                       name="customer.email"
                       value={formData.customer.email}
                       onChange={handleChange}
                       required
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                      aria-required="true"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                    <label
+                      htmlFor="phone"
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                    >
                       Phone*
                     </label>
                     <input
+                      id="phone"
                       type="tel"
                       name="customer.phone"
                       value={formData.customer.phone}
@@ -370,28 +470,42 @@ const CheckoutPage = () => {
                       pattern="[0-9]{10}"
                       title="10 digit phone number"
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                      aria-required="true"
+                      aria-describedby="phone-desc"
                     />
+                    <p id="phone-desc" className="text-xs text-gray-500 mt-1">
+                      Enter a 10-digit phone number
+                    </p>
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                    <label
+                      htmlFor="address1"
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                    >
                       Address 1*
                     </label>
                     <input
+                      id="address1"
                       type="text"
                       name="shippingAddress.address1"
                       value={formData.shippingAddress.address1}
                       onChange={handleChange}
                       required
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                      aria-required="true"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                    <label
+                      htmlFor="address2"
+                      className="block text-gray-700 text-sm font-medium mb-2"
+                    >
                       Address 2
                     </label>
                     <input
+                      id="address2"
                       type="text"
                       name="shippingAddress.address2"
                       value={formData.shippingAddress.address2}
@@ -402,10 +516,14 @@ const CheckoutPage = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="relative">
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                      <label
+                        htmlFor="state"
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                      >
                         State*
                       </label>
                       <input
+                        id="state"
                         type="text"
                         value={stateSearch}
                         onChange={handleStateSearch}
@@ -416,15 +534,24 @@ const CheckoutPage = () => {
                         placeholder="Search state"
                         required
                         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                        aria-required="true"
+                        aria-autocomplete="list"
+                        aria-controls="state-suggestions"
                       />
                       {showStateSuggestions && stateSearch && (
-                        <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
+                        <ul
+                          id="state-suggestions"
+                          className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg"
+                          role="listbox"
+                        >
                           {filteredStates.length > 0 ? (
                             filteredStates.map((state) => (
                               <li
                                 key={state}
                                 onClick={() => selectState(state)}
                                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                role="option"
+                                aria-selected={formData.shippingAddress.state === state}
                               >
                                 {state}
                               </li>
@@ -438,30 +565,46 @@ const CheckoutPage = () => {
                       )}
                     </div>
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                      <label
+                        htmlFor="city"
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                      >
                         City*
                       </label>
                       <input
+                        id="city"
                         type="text"
                         name="shippingAddress.city"
                         value={formData.shippingAddress.city}
                         onChange={handleChange}
                         required
                         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                        aria-required="true"
                       />
                     </div>
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                      <label
+                        htmlFor="pincode"
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                      >
                         Pincode*
                       </label>
                       <input
+                        id="pincode"
                         type="text"
                         name="shippingAddress.pincode"
                         value={formData.shippingAddress.pincode}
                         onChange={handleChange}
                         required
+                        pattern="[0-9]{6}"
+                        title="6 digit pincode"
                         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                        aria-required="true"
+                        aria-describedby="pincode-desc"
                       />
+                      <p id="pincode-desc" className="text-xs text-gray-500 mt-1">
+                        Enter a 6-digit pincode
+                      </p>
                     </div>
                   </div>
 
@@ -470,10 +613,14 @@ const CheckoutPage = () => {
                       GST Details (Optional)
                     </h3>
                     <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
+                      <label
+                        htmlFor="gstNumber"
+                        className="block text-gray-700 text-sm font-medium mb-2"
+                      >
                         GST Number
                       </label>
                       <input
+                        id="gstNumber"
                         type="text"
                         name="gstDetails.gstNumber"
                         value={formData.gstDetails.gstNumber}
@@ -486,7 +633,8 @@ const CheckoutPage = () => {
                   <div className="pt-4 flex flex-col sm:flex-row gap-4">
                     <button
                       type="submit"
-                      className="w-full sm:w-auto bg-[#1A3329] text-white px-8 py-3 rounded-md hover:bg-[#2F6844] transition-colors duration-300 font-medium"
+                      className="w-full sm:w-auto bg-[#1A3329] text-white px-8 py-3 rounded-md hover:bg-[#2F6844] transition-colors duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={loading}
                     >
                       Continue to Payment
                     </button>
@@ -494,14 +642,15 @@ const CheckoutPage = () => {
                       type="button"
                       onClick={handleBackToCart}
                       className="w-full sm:w-auto bg-gray-200 text-gray-800 px-8 py-3 rounded-md hover:bg-gray-300 transition-colors duration-300 font-medium"
+                      disabled={loading}
                     >
                       Back to Cart
                     </button>
                   </div>
                 </form>
-              </div>
+              </section>
 
-              <div className="bg-white rounded-lg shadow-md p-6 h-fit">
+              <aside className="bg-white rounded-lg shadow-md p-6 h-fit">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 pb-3 border-b border-gray-200">
                   Order Summary
                 </h2>
@@ -517,7 +666,7 @@ const CheckoutPage = () => {
                         </span>
                       </div>
                       <span className="text-sm font-medium">
-                        ₹{(item.price * item.quantity).toLocaleString("en-IN")}
+                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                       </span>
                     </div>
                   ))}
@@ -525,11 +674,11 @@ const CheckoutPage = () => {
                 <div className="border-t border-gray-200 pt-4 space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
-                    <span>₹{subtotal.toLocaleString("en-IN")}</span>
+                    <span>₹{subtotal.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Shipping</span>
-                    <span>₹{shippingCost.toLocaleString("en-IN")}</span>
+                    <span>₹{shippingCost.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGST (18%)</span>
@@ -540,27 +689,29 @@ const CheckoutPage = () => {
                     <span>₹{total.toFixed(2)}</span>
                   </div>
                 </div>
-              </div>
+              </aside>
             </div>
           )}
 
           {/* Step 2: Payment */}
           {step === 2 && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
+              <section className="lg:col-span-2 bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-3 border-b border-gray-200">
                   Payment Method
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-4">
+                  <fieldset className="space-y-4">
+                    <legend className="sr-only">Payment Method</legend>
                     <label className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
                         name="paymentMethod"
                         value="UPI"
-                        checked={formData.paymentMethod === "UPI"}
+                        checked={formData.paymentMethod === 'UPI'}
                         onChange={handleChange}
                         className="form-radio h-5 w-5 text-[#1A3329]"
+                        id="payment-upi"
                       />
                       <div className="ml-3">
                         <span className="block font-medium text-gray-900">
@@ -577,9 +728,10 @@ const CheckoutPage = () => {
                         type="radio"
                         name="paymentMethod"
                         value="Card"
-                        checked={formData.paymentMethod === "Card"}
+                        checked={formData.paymentMethod === 'Card'}
                         onChange={handleChange}
                         className="form-radio h-5 w-5 text-[#1A3329]"
+                        id="payment-card"
                       />
                       <div className="ml-3">
                         <span className="block font-medium text-gray-900">
@@ -596,9 +748,10 @@ const CheckoutPage = () => {
                         type="radio"
                         name="paymentMethod"
                         value="COD"
-                        checked={formData.paymentMethod === "COD"}
+                        checked={formData.paymentMethod === 'COD'}
                         onChange={handleChange}
                         className="form-radio h-5 w-5 text-[#1A3329]"
+                        id="payment-cod"
                       />
                       <div className="ml-3">
                         <span className="block font-medium text-gray-900">
@@ -609,22 +762,23 @@ const CheckoutPage = () => {
                         </span>
                       </div>
                     </label>
-                  </div>
+                  </fieldset>
 
                   <div className="flex flex-col sm:flex-row gap-4 pt-6">
                     <button
                       type="submit"
                       disabled={loading}
                       className={`order-2 sm:order-1 flex-1 bg-[#1A3329] text-white px-6 py-3 rounded-md hover:bg-[#2F6844] transition-colors duration-300 font-medium ${
-                        loading ? "opacity-50 cursor-not-allowed" : ""
+                        loading ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                     >
-                      {loading ? "Processing..." : "Place Order"}
+                      {loading ? 'Processing...' : 'Place Order'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setStep(1)}
                       className="order-1 sm:order-2 bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors duration-300 font-medium"
+                      disabled={loading}
                     >
                       Back to Billing
                     </button>
@@ -632,14 +786,15 @@ const CheckoutPage = () => {
                       type="button"
                       onClick={handleBackToCart}
                       className="order-3 sm:order-3 bg-gray-200 text-gray-800 px-6 py-3 rounded-md hover:bg-gray-300 transition-colors duration-300 font-medium"
+                      disabled={loading}
                     >
                       Back to Cart
                     </button>
                   </div>
                 </form>
-              </div>
+              </section>
 
-              <div className="bg-white rounded-lg shadow-md p-6 h-fit">
+              <aside className="bg-white rounded-lg shadow-md p-6 h-fit">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 pb-3 border-b border-gray-200">
                   Order Summary
                 </h2>
@@ -655,7 +810,7 @@ const CheckoutPage = () => {
                         </span>
                       </div>
                       <span className="text-sm font-medium">
-                        ₹{(item.price * item.quantity).toLocaleString("en-IN")}
+                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                       </span>
                     </div>
                   ))}
@@ -673,17 +828,19 @@ const CheckoutPage = () => {
                       onChange={(e) =>
                         handleChange({
                           target: {
-                            name: "coupon.code",
+                            name: 'coupon.code',
                             value: e.target.value,
                           },
                         })
                       }
                       className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
+                      aria-label="Coupon code"
                     />
                     <button
                       type="button"
                       onClick={applyCoupon}
                       className="bg-[#1A3329] text-white px-3 py-2 rounded-md hover:bg-[#2F6844] transition-colors duration-300 text-sm"
+                      disabled={loading}
                     >
                       Apply
                     </button>
@@ -696,6 +853,7 @@ const CheckoutPage = () => {
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -713,11 +871,11 @@ const CheckoutPage = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
-                    <span>₹{subtotal.toLocaleString("en-IN")}</span>
+                    <span>₹{subtotal.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Shipping</span>
-                    <span>₹{shippingCost.toLocaleString("en-IN")}</span>
+                    <span>₹{shippingCost.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGST (18%)</span>
@@ -728,13 +886,13 @@ const CheckoutPage = () => {
                     <span>₹{total.toFixed(2)}</span>
                   </div>
                 </div>
-              </div>
+              </aside>
             </div>
           )}
 
           {/* Step 3: Order Confirmation */}
           {step === 3 && order && (
-            <div className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
+            <section className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
               <div className="text-center mb-8">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg
@@ -743,6 +901,7 @@ const CheckoutPage = () => {
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"
@@ -777,14 +936,14 @@ const CheckoutPage = () => {
                         </span>
                       </div>
                       <span className="font-medium">
-                        ₹{(item.price * item.quantity).toLocaleString("en-IN")}
+                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                       </span>
                     </div>
                   ))}
                 </div>
                 <div className="flex justify-between font-bold text-lg mt-4 pt-4 border-t border-gray-200">
                   <span>Total</span>
-                  <span>₹{order.total.toLocaleString("en-IN")}</span>
+                  <span>₹{order.total.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
@@ -813,8 +972,8 @@ const CheckoutPage = () => {
                     </p>
                   )}
                   <p className="text-gray-600">
-                    {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
-                    - {order.shippingAddress.pincode}
+                    {order.shippingAddress.city}, {order.shippingAddress.state} -{' '}
+                    {order.shippingAddress.pincode}
                   </p>
                   <p className="text-gray-600">
                     Shipping Method: {order.shippingMethod.type}
@@ -824,16 +983,16 @@ const CheckoutPage = () => {
 
               <div className="text-center">
                 <button
-                  onClick={() => navigate("/")}
+                  onClick={() => navigate('/')}
                   className="bg-[#1A3329] text-white px-8 py-3 rounded-md hover:bg-[#2F6844] transition-colors duration-300 font-medium"
                 >
                   Continue Shopping
                 </button>
               </div>
-            </div>
+            </section>
           )}
         </div>
-      </div>
+      </main>
 
       <Footer />
     </div>
