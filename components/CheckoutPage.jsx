@@ -170,8 +170,7 @@ const CheckoutPage = () => {
       }));
 
       const shippingCost = formData.shippingMethod.cost;
-      const tax = subtotal * 0.18;
-      const total = subtotal + shippingCost + tax;
+      const total = subtotal + shippingCost;
 
       const orderData = {
         ...formData,
@@ -259,8 +258,7 @@ const CheckoutPage = () => {
   };
 
   const shippingCost = formData.shippingMethod.cost;
-  const tax = subtotal * 0.18;
-  const total = subtotal + shippingCost + tax;
+  const total = subtotal + shippingCost;
 
   const indianStates = [
     'Andaman and Nicobar Islands',
@@ -708,13 +706,9 @@ const CheckoutPage = () => {
                     <span className="text-gray-600">Shipping</span>
                     <span>₹{shippingCost.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IGST (18%)</span>
-                    <span>₹{tax.toFixed(2)}</span>
-                  </div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-200">
                     <span>Total</span>
-                    <span>₹{total.toFixed(2)}</span>
+                    <span>₹{total.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </aside>
@@ -905,13 +899,9 @@ const CheckoutPage = () => {
                     <span className="text-gray-600">Shipping</span>
                     <span>₹{shippingCost.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IGST (18%)</span>
-                    <span>₹{tax.toFixed(2)}</span>
-                  </div>
                   <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-200">
                     <span>Total</span>
-                    <span>₹{total.toFixed(2)}</span>
+                    <span>₹{total.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </aside>
