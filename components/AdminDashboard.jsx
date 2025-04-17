@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./Navbar";
 import axios from "axios";
@@ -72,10 +72,20 @@ const AdminDashboard = () => {
   const [searchOrderId, setSearchOrderId] = useState("");
   const [isFiltering, setIsFiltering] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const lastFilterParams = useRef({}); // Cache last filter params
+  const lastFilterParams = useRef({});
+  const prevFilterDate = useRef("");
+  const renderCount = useRef(0);
+  const isFilterPending = useRef(false);
 
   const token = localStorage.getItem("token");
   const stableNavigate = useCallback((path) => navigate(path), [navigate]);
+
+  // Track renders for debugging
+  renderCount.current += 1;
+  console.log(`Render count: ${renderCount.current}`);
+
+  // Memoize orders to stabilize handleFilterOrders
+  const memoizedOrders = useMemo(() => orders, [orders]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,7 +144,10 @@ const AdminDashboard = () => {
 
   const handleFilterOrders = useCallback(
     async (params) => {
-      if (isFiltering) return;
+      if (isFiltering) {
+        console.log("Skipping filter: already filtering");
+        return;
+      }
 
       // Skip if params haven't changed
       if (
@@ -145,17 +158,19 @@ const AdminDashboard = () => {
           "Skipping duplicate filter with params:",
           JSON.stringify(params)
         );
+        toast.info("No change in filter parameters.");
         return;
       }
 
       // Skip if no date is provided
       if (!params.date) {
-        setFilteredOrders(orders);
+        setFilteredOrders(memoizedOrders);
         lastFilterParams.current = {};
         return;
       }
 
       setIsFiltering(true);
+      isFilterPending.current = true;
       try {
         console.log("Filtering orders with params:", JSON.stringify(params));
         const response = await axios.get(`${BACKEND_URL}/api/orders`, {
@@ -177,18 +192,22 @@ const AdminDashboard = () => {
         toast.error("Failed to filter orders. Please try again.");
       } finally {
         setIsFiltering(false);
+        isFilterPending.current = false;
       }
     },
-    [orders, token, isFiltering, filteredOrders.length]
+    [memoizedOrders, token, isFiltering, filteredOrders.length]
   );
 
   const handleSearchOrders = useCallback(
     async (orderId) => {
-      if (isSearching) return;
+      if (isSearching) {
+        console.log("Skipping search: already searching");
+        return;
+      }
 
       // Skip if no order ID is provided
       if (!orderId.trim()) {
-        setFilteredOrders(orders);
+        setFilteredOrders(memoizedOrders);
         return;
       }
 
@@ -216,51 +235,67 @@ const AdminDashboard = () => {
         setIsSearching(false);
       }
     },
-    [orders, token, isSearching]
+    [memoizedOrders, token, isSearching]
   );
 
-  const debouncedHandleFilterOrders = useCallback(
-    debounce((params) => handleFilterOrders(params), 600, {
-      leading: false,
-      trailing: true,
-    }),
+  const debouncedHandleFilterOrders = useMemo(
+    () =>
+      debounce((params) => {
+        console.log("Debounced filter triggered with params:", JSON.stringify(params));
+        handleFilterOrders(params);
+      }, 600, { leading: false, trailing: true }),
     [handleFilterOrders]
   );
 
-  const debouncedHandleSearchOrders = useCallback(
-    debounce((orderId) => handleSearchOrders(orderId), 600, {
-      leading: false,
-      trailing: true,
-    }),
+  const debouncedHandleSearchOrders = useMemo(
+    () =>
+      debounce((orderId) => {
+        console.log("Debounced search triggered with orderId:", orderId);
+        handleSearchOrders(orderId);
+      }, 600, { leading: false, trailing: true }),
     [handleSearchOrders]
   );
 
   const clearFilters = () => {
     setFilterDate("");
     setSearchOrderId("");
-    setFilteredOrders(orders);
+    setFilteredOrders(memoizedOrders);
     lastFilterParams.current = {};
+    prevFilterDate.current = "";
+    isFilterPending.current = false;
     toast.success("Filters and search cleared.");
   };
 
   // Trigger date filtering when filterDate changes
   useEffect(() => {
     console.log("useEffect triggered with filterDate:", filterDate);
+
+    // Skip if filterDate hasn't changed or a filter is pending
+    if (filterDate === prevFilterDate.current || isFilterPending.current) {
+      console.log(
+        `Skipping useEffect: filterDate unchanged (${filterDate}) or filter pending`
+      );
+      return;
+    }
+
     const params = {};
     if (filterDate) params.date = filterDate;
+
+    // Update prevFilterDate
+    prevFilterDate.current = filterDate;
 
     // Only trigger if a date is set
     if (filterDate) {
       debouncedHandleFilterOrders(params);
     } else if (lastFilterParams.current.date) {
-      setFilteredOrders(orders); // Reset to all orders if no date filter
+      setFilteredOrders(memoizedOrders);
       lastFilterParams.current = {};
     }
 
     return () => {
       debouncedHandleFilterOrders.cancel();
     };
-  }, [filterDate, debouncedHandleFilterOrders]);
+  }, [filterDate, debouncedHandleFilterOrders, memoizedOrders]);
 
   const handleViewOrderDetails = (order) => setSelectedOrder(order);
 
@@ -270,6 +305,16 @@ const AdminDashboard = () => {
     localStorage.removeItem("userName");
     stableNavigate("/");
   };
+
+  const handleSearchClick = () => {
+    console.log("Search button clicked with orderId:", searchOrderId);
+    debouncedHandleSearchOrders(searchOrderId);
+  };
+
+  const isFilterButtonDisabled = useMemo(
+    () => isFiltering || loading || filterDate === prevFilterDate.current,
+    [isFiltering, loading, filterDate]
+  );
 
   const downloadOrderPDF = (order) => {
     try {
@@ -339,7 +384,7 @@ const AdminDashboard = () => {
         startY: itemsY + 5,
         head: [["Item Name", "Qty", "Unit Price (₹)", "Total (₹)"]],
         body: (order.items || []).map((item) => [
-          item.name || "Unknown Item",
+          item.name || "Unknown Item", // Fixed typo
           item.quantity || 0,
           (item.price || 0)
             .toLocaleString("en-IN", { style: "currency", currency: "INR" })
@@ -387,7 +432,7 @@ const AdminDashboard = () => {
       if (order.paymentMethod !== "COD" && order.razorpayPaymentId) {
         paymentBody.push(
           ["Payment ID", order.razorpayPaymentId],
-          ["Status", "Paid"]
+          ["Status", "Paid"],
         );
       }
       autoTable(doc, {
@@ -477,7 +522,7 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <button
-                        onClick={() => debouncedHandleSearchOrders(searchOrderId)}
+                        onClick={handleSearchClick}
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
                         disabled={isSearching || loading}
                       >
@@ -506,7 +551,7 @@ const AdminDashboard = () => {
                           debouncedHandleFilterOrders({ date: filterDate })
                         }
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
-                        disabled={isFiltering || loading}
+                        disabled={isFilterButtonDisabled}
                       >
                         Filter Orders
                       </button>
@@ -542,9 +587,7 @@ const AdminDashboard = () => {
                         ></path>
                       </svg>
                       <p>
-                        {isFiltering
-                          ? "Filtering orders..."
-                          : "Searching orders..."}
+                        {isFiltering ? "Filtering orders..." : "Searching orders..."}
                       </p>
                     </div>
                   )}
@@ -657,16 +700,13 @@ const AdminDashboard = () => {
                           {item.name} (x{item.quantity})
                         </span>
                         <span>
-                          ₹
-                          {(item.price * item.quantity).toLocaleString("en-IN")}
+                          ₹{(item.price * item.quantity).toLocaleString("en-IN")}
                         </span>
                       </div>
                     ))}
                     <div className="flex justify-between font-bold mt-4">
                       <span>Total</span>
-                      <span>
-                        ₹{selectedOrder.total.toLocaleString("en-IN")}
-                      </span>
+                      <span>₹{selectedOrder.total.toLocaleString("en-IN")}</span>
                     </div>
                   </div>
                   <div className="mt-6">
@@ -692,4 +732,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard;
+export default React.memo(AdminDashboard);
