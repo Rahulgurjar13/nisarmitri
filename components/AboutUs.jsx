@@ -502,7 +502,7 @@ const AboutPage = () => {
         <section id="videos" className="py-6 sm:py-8 md:py-12 bg-[#F5F7F6]">
           <div className="container mx-auto px-4 sm:px-6">
             <SectionHeading 
-              title="Educational Videos" 
+              title="Youtube Videos" 
               description="Explore our collection of informative videos on sustainable living practices and environmental conservation."
             />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">

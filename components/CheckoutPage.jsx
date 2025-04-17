@@ -24,7 +24,7 @@ const CheckoutPage = () => {
       pincode: '201310',
       country: 'India',
     },
-    shippingMethod: { type: 'Standard', cost: 160 },
+    shippingMethod: { type: 'Standard', cost: 80 }, // Initialize with default cost
     coupon: { code: '', discount: 0 },
     gstDetails: {
       gstNumber: '',
@@ -35,6 +35,36 @@ const CheckoutPage = () => {
   });
   const [stateSearch, setStateSearch] = useState('');
   const [showStateSuggestions, setShowStateSuggestions] = useState(false);
+
+  // Calculate subtotal
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  // Dynamically set shipping cost based on subtotal
+  useEffect(() => {
+    let shippingCost = 80; // Default for subtotal < 500
+    if (subtotal >= 800) {
+      shippingCost = 0; // Free shipping for subtotal >= 800
+    } else if (subtotal >= 500) {
+      shippingCost = 50; // ₹50 for subtotal between 500 and 799
+    }
+
+    // Apply free shipping if coupon is valid
+    if (formData.coupon.code.toUpperCase() === 'FREESHIPPING') {
+      shippingCost = 0;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
+      coupon: {
+        ...prev.coupon,
+        discount: formData.coupon.code.toUpperCase() === 'FREESHIPPING' ? prev.shippingMethod.cost : 0,
+      },
+    }));
+  }, [subtotal, formData.coupon.code]);
 
   // Load Razorpay SDK
   useEffect(() => {
@@ -74,13 +104,21 @@ const CheckoutPage = () => {
       setFormData((prev) => ({
         ...prev,
         shippingMethod: { ...prev.shippingMethod, cost: 0 },
-        coupon: { code: 'FREESHIPPING', discount: 160 },
+        coupon: { code: 'FREESHIPPING', discount: prev.shippingMethod.cost },
       }));
       setError(null);
     } else {
+      // Recompute shipping cost based on subtotal
+      let shippingCost = 80;
+      if (subtotal >= 800) {
+        shippingCost = 0;
+      } else if (subtotal >= 500) {
+        shippingCost = 50;
+      }
+
       setFormData((prev) => ({
         ...prev,
-        shippingMethod: { ...prev.shippingMethod, cost: 160 },
+        shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
         coupon: { code: prev.coupon.code, discount: 0 },
       }));
       setError('Invalid coupon code');
@@ -131,12 +169,7 @@ const CheckoutPage = () => {
         variant: item.variant || '',
       }));
 
-      const subtotal = cartItems.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-      const shippingCost =
-        formData.coupon.discount > 0 ? 0 : formData.shippingMethod.cost;
+      const shippingCost = formData.shippingMethod.cost;
       const tax = subtotal * 0.18;
       const total = subtotal + shippingCost + tax;
 
@@ -225,12 +258,7 @@ const CheckoutPage = () => {
     setShowStateSuggestions(false);
   };
 
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
-  const shippingCost =
-    formData.coupon.discount > 0 ? 0 : formData.shippingMethod.cost;
+  const shippingCost = formData.shippingMethod.cost;
   const tax = subtotal * 0.18;
   const total = subtotal + shippingCost + tax;
 

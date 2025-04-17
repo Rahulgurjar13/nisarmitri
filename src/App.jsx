@@ -20,6 +20,7 @@ import Login from "../components/Login.jsx"; // Updated import: Capital "L" and 
 import PrivacyPolicy from "../components/PrivacyPolicy.jsx";
 import TermsAndConditions from "../components/TermsAndConditions.jsx";
 import ServicesPage from "../components/ServicesPage.jsx";
+import WasteManagementPage from "../components/WasteManagementPage.jsx";
 
 // ProtectedRoute component to restrict access to admin-only routes
 const ProtectedRoute = ({ children }) => {
@@ -49,6 +50,7 @@ function App() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/privacy" element={<PrivacyPolicy/>} />
         <Route path="/services" element={<ServicesPage />} />
+        <Route path="/waste-management" element={<WasteManagementPage />} />
        
         <Route path="/terms-condition" element={<TermsAndConditions />} />
       

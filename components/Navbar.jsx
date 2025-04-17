@@ -67,7 +67,8 @@ const Navbar = () => {
     { path: "/", label: "Home" },
     { path: "/about", label: "About Us" },
     { path: "/shop", label: "Shop Now" },
-    { path: "/services", label: "Our Services" }, // Added Our Services
+    { path: "/services", label: "Our Services" },
+    { path: "/waste-management", label: "Waste Management" }, // Added Our Services
     { path: "/contact", label: "Contact Us" },
   ];
 
