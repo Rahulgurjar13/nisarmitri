@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./Navbar";
 import axios from "axios";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import debounce from "lodash/debounce";
-import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
 const BACKEND_URL = "https://backendforshop.onrender.com";
 
@@ -68,11 +66,11 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [error, setError] = useState(null);
-  const [filterDate, setFilterDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [searchOrderId, setSearchOrderId] = useState("");
   const [isFiltering, setIsFiltering] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const lastFilterParams = useRef({}); // Cache last filter params
 
   const token = localStorage.getItem("token");
   const stableNavigate = useCallback((path) => navigate(path), [navigate]);
@@ -115,7 +113,6 @@ const AdminDashboard = () => {
             stableNavigate("/login");
           } else {
             setError("Failed to load data. Please try again later.");
-            toast.error("Failed to load data. Please try again later.");
             setOrders([]);
             setFilteredOrders([]);
           }
@@ -132,135 +129,99 @@ const AdminDashboard = () => {
     };
   }, [token, stableNavigate]);
 
-  const handleFilterOrders = useCallback(
-    async (params) => {
-      if (isFiltering) return;
+  const handleFilterOrders = useCallback(async (params) => {
+    if (isFiltering) return;
 
-      // Skip if params haven't changed
-      if (
-        JSON.stringify(params) === JSON.stringify(lastFilterParams.current) &&
-        filteredOrders.length > 0
-      ) {
-        console.log(
-          "Skipping duplicate filter with params:",
-          JSON.stringify(params)
-        );
-        return;
-      }
+    // Skip filtering if no date parameters are provided
+    if (!params.startDate && !params.endDate) {
+      setFilteredOrders(orders);
+      return;
+    }
 
-      // Skip if no date is provided
-      if (!params.date) {
-        setFilteredOrders(orders);
-        lastFilterParams.current = {};
-        return;
-      }
+    setIsFiltering(true);
+    try {
+      console.log("Filtering orders with params:", JSON.stringify(params));
+      const response = await axios.get(`${BACKEND_URL}/api/orders`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setFilteredOrders(response.data);
+    } catch (error) {
+      console.error(
+        "Filter orders error:",
+        error.response?.status,
+        error.response?.data || error.message
+      );
+      setError("Failed to filter orders. Please try again.");
+    } finally {
+      setIsFiltering(false);
+    }
+  }, [orders, token, isFiltering]);
 
-      setIsFiltering(true);
-      try {
-        console.log("Filtering orders with params:", JSON.stringify(params));
-        const response = await axios.get(`${BACKEND_URL}/api/orders`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setFilteredOrders(response.data);
-        lastFilterParams.current = params;
-        if (response.data.length === 0) {
-          toast.info("No orders found for the selected date.");
-        }
-      } catch (error) {
-        console.error(
-          "Filter orders error:",
-          error.response?.status,
-          error.response?.data || error.message
-        );
-        setError("Failed to filter orders. Please try again.");
-        toast.error("Failed to filter orders. Please try again.");
-      } finally {
-        setIsFiltering(false);
-      }
-    },
-    [orders, token, isFiltering, filteredOrders.length]
-  );
+  const handleSearchOrders = useCallback(async (orderId) => {
+    if (isSearching) return;
 
-  const handleSearchOrders = useCallback(
-    async (orderId) => {
-      if (isSearching) return;
+    // Skip searching if no order ID is provided
+    if (!orderId) {
+      setFilteredOrders(orders);
+      return;
+    }
 
-      // Skip if no order ID is provided
-      if (!orderId.trim()) {
-        setFilteredOrders(orders);
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        const params = { orderId: orderId.trim() };
-        console.log("Searching orders with params:", JSON.stringify(params));
-        const response = await axios.get(`${BACKEND_URL}/api/orders`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setFilteredOrders(response.data);
-        if (response.data.length === 0) {
-          toast.info("No orders found for the provided Order ID.");
-        }
-      } catch (error) {
-        console.error(
-          "Search orders error:",
-          error.response?.status,
-          error.response?.data || error.message
-        );
-        setError("Failed to search orders. Please try again.");
-        toast.error("Failed to search orders. Please try again.");
-      } finally {
-        setIsSearching(false);
-      }
-    },
-    [orders, token, isSearching]
-  );
+    setIsSearching(true);
+    try {
+      const params = { orderId };
+      console.log("Searching orders with params:", JSON.stringify(params));
+      const response = await axios.get(`${BACKEND_URL}/api/orders`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setFilteredOrders(response.data);
+    } catch (error) {
+      console.error(
+        "Search orders error:",
+        error.response?.status,
+        error.response?.data || error.message
+      );
+      setError("Failed to search orders. Please try again.");
+    } finally {
+      setIsSearching(false);
+    }
+  }, [orders, token, isSearching]);
 
   const debouncedHandleFilterOrders = useCallback(
-    debounce((params) => handleFilterOrders(params), 600, {
-      leading: false,
-      trailing: true,
-    }),
+    debounce((params) => handleFilterOrders(params), 500, { leading: false, trailing: true }),
     [handleFilterOrders]
   );
 
   const debouncedHandleSearchOrders = useCallback(
-    debounce((orderId) => handleSearchOrders(orderId), 600, {
-      leading: false,
-      trailing: true,
-    }),
+    debounce((orderId) => handleSearchOrders(orderId), 500, { leading: false, trailing: true }),
     [handleSearchOrders]
   );
 
   const clearFilters = () => {
-    setFilterDate("");
+    setStartDate("");
+    setEndDate("");
     setSearchOrderId("");
     setFilteredOrders(orders);
-    lastFilterParams.current = {};
-    toast.success("Filters and search cleared.");
   };
 
-  // Trigger date filtering when filterDate changes
+  // Trigger date filtering when date inputs change
   useEffect(() => {
-    console.log("useEffect triggered with filterDate:", filterDate);
     const params = {};
-    if (filterDate) params.date = filterDate;
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
 
-    // Only trigger if a date is set
-    if (filterDate) {
+    // Only trigger if at least one date is set
+    if (startDate || endDate) {
       debouncedHandleFilterOrders(params);
-    } else if (lastFilterParams.current.date) {
-      setFilteredOrders(orders); // Reset to all orders if no date filter
-      lastFilterParams.current = {};
+    } else {
+      setFilteredOrders(orders); // Reset to all orders if no date filters
     }
 
     return () => {
       debouncedHandleFilterOrders.cancel();
     };
-  }, [filterDate, debouncedHandleFilterOrders]);
+  }, [startDate, endDate, orders, debouncedHandleFilterOrders]);
 
   const handleViewOrderDetails = (order) => setSelectedOrder(order);
 
@@ -320,7 +281,7 @@ const AdminDashboard = () => {
           }`,
         ],
         ["Pincode", order.shippingAddress?.pincode || "N/A"],
-        ["Shipping Method", order.shippingMethod?.type || "Standard"],
+        ["Shipping Method", order.shippingMethod?.type || "Standard"]
       );
       autoTable(doc, {
         startY: shippingY + 5,
@@ -404,7 +365,6 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error("PDF generation error:", error);
       setError("Failed to generate PDF. Please try again.");
-      toast.error("Failed to generate PDF. Please try again.");
     }
   };
 
@@ -487,24 +447,38 @@ const AdminDashboard = () => {
                     <div className="flex flex-col md:flex-row gap-4 items-end">
                       <div className="flex flex-col">
                         <label
-                          htmlFor="filterDate"
+                          htmlFor="startDate"
                           className="text-sm font-medium text-gray-700 mb-1"
                         >
-                          Filter by Date
+                          Start Date
                         </label>
                         <input
                           type="date"
-                          id="filterDate"
-                          value={filterDate}
-                          onChange={(e) => setFilterDate(e.target.value)}
+                          id="startDate"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="border border-gray-300 rounded-md p-2"
+                          disabled={isFiltering || loading}
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label
+                          htmlFor="endDate"
+                          className="text-sm font-medium text-gray-700 mb-1"
+                        >
+                          End Date
+                        </label>
+                        <input
+                          type="date"
+                          id="endDate"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
                           className="border border-gray-300 rounded-md p-2"
                           disabled={isFiltering || loading}
                         />
                       </div>
                       <button
-                        onClick={() =>
-                          debouncedHandleFilterOrders({ date: filterDate })
-                        }
+                        onClick={() => debouncedHandleFilterOrders({ startDate, endDate })}
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
                         disabled={isFiltering || loading}
                       >
@@ -541,11 +515,7 @@ const AdminDashboard = () => {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         ></path>
                       </svg>
-                      <p>
-                        {isFiltering
-                          ? "Filtering orders..."
-                          : "Searching orders..."}
-                      </p>
+                      <p>{isFiltering ? "Filtering orders..." : "Searching orders..."}</p>
                     </div>
                   )}
                   {filteredOrders.length > 0 ? (
