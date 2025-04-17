@@ -52,7 +52,7 @@ const EmptyState = ({ message }) => (
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={1.5}
-        d="M19 20H5a2 2 0 01-2-2V6a2 gym2 0 012-2h10a2 2 0 012 2v1M19 20a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0h4"
+        d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1M19 20a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0h4"
       />
     </svg>
     <h3 className="text-xl font-medium text-gray-900 mb-2">{message}</h3>
@@ -70,6 +70,7 @@ const AdminDashboard = () => {
   const [endDate, setEndDate] = useState("");
   const [searchOrderId, setSearchOrderId] = useState("");
   const [isFiltering, setIsFiltering] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const token = localStorage.getItem("token");
   const stableNavigate = useCallback((path) => navigate(path), [navigate]);
@@ -131,19 +132,19 @@ const AdminDashboard = () => {
   const handleFilterOrders = useCallback(async () => {
     if (isFiltering) return;
 
+    // Skip filtering if no date parameters are provided
+    if (!startDate && !endDate) {
+      setFilteredOrders(orders);
+      return;
+    }
+
     setIsFiltering(true);
     try {
-      if (!startDate && !endDate && !searchOrderId) {
-        setFilteredOrders(orders);
-        return;
-      }
-
       const params = {};
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
-      if (searchOrderId) params.orderId = searchOrderId;
 
-      console.log("Filtering orders with params:", params);
+      console.log("Filtering orders with params:", JSON.stringify(params));
       const response = await axios.get(`${BACKEND_URL}/api/orders`, {
         params,
         headers: { Authorization: `Bearer ${token}` },
@@ -159,11 +160,47 @@ const AdminDashboard = () => {
     } finally {
       setIsFiltering(false);
     }
-  }, [startDate, endDate, searchOrderId, orders, token, isFiltering]);
+  }, [startDate, endDate, orders, token, isFiltering]);
+
+  const handleSearchOrders = useCallback(async () => {
+    if (isSearching) return;
+
+    // Skip searching if no order ID is provided
+    if (!searchOrderId) {
+      setFilteredOrders(orders);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const params = { orderId: searchOrderId };
+
+      console.log("Searching orders with params:", JSON.stringify(params));
+      const response = await axios.get(`${BACKEND_URL}/api/orders`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setFilteredOrders(response.data);
+    } catch (error) {
+      console.error(
+        "Search orders error:",
+        error.response?.status,
+        error.response?.data || error.message
+      );
+      setError("Failed to search orders. Please try again.");
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchOrderId, orders, token, isSearching]);
 
   const debouncedHandleFilterOrders = useCallback(
-    debounce(handleFilterOrders, 500),
+    debounce(handleFilterOrders, 500, { leading: false, trailing: true }),
     [handleFilterOrders]
+  );
+
+  const debouncedHandleSearchOrders = useCallback(
+    debounce(handleSearchOrders, 500, { leading: false, trailing: true }),
+    [handleSearchOrders]
   );
 
   const clearFilters = () => {
@@ -173,12 +210,17 @@ const AdminDashboard = () => {
     setFilteredOrders(orders);
   };
 
+  // Trigger date filtering when date inputs change
   useEffect(() => {
-    debouncedHandleFilterOrders();
+    if (startDate || endDate) {
+      debouncedHandleFilterOrders();
+    } else {
+      setFilteredOrders(orders); // Reset to all orders if no date filters
+    }
     return () => {
       debouncedHandleFilterOrders.cancel();
     };
-  }, [startDate, endDate, searchOrderId, debouncedHandleFilterOrders]);
+  }, [startDate, endDate, orders, debouncedHandleFilterOrders]);
 
   const handleViewOrderDetails = (order) => setSelectedOrder(order);
 
@@ -375,56 +417,65 @@ const AdminDashboard = () => {
               {!selectedOrder ? (
                 <>
                   <div className="p-6 flex flex-col md:flex-row gap-4 mb-4">
-                    <div className="flex flex-col">
-                      <label
-                        htmlFor="searchOrderId"
-                        className="text-sm font-medium text-gray-700 mb-1"
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                      <div className="flex flex-col">
+                        <label
+                          htmlFor="searchOrderId"
+                          className="text-sm font-medium text-gray-700 mb-1"
+                        >
+                          Order ID
+                        </label>
+                        <input
+                          type="text"
+                          id="searchOrderId"
+                          value={searchOrderId}
+                          onChange={(e) => setSearchOrderId(e.target.value)}
+                          placeholder="Enter Order ID"
+                          className="border border-gray-300 rounded-md p-2"
+                          disabled={isSearching || loading}
+                        />
+                      </div>
+                      <button
+                        onClick={debouncedHandleSearchOrders}
+                        className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
+                        disabled={isSearching || loading}
                       >
-                        Order ID
-                      </label>
-                      <input
-                        type="text"
-                        id="searchOrderId"
-                        value={searchOrderId}
-                        onChange={(e) => setSearchOrderId(e.target.value)}
-                        placeholder="Enter Order ID"
-                        className="border border-gray-300 rounded-md p-2"
-                        disabled={isFiltering || loading}
-                      />
+                        Search
+                      </button>
                     </div>
-                    <div className="flex flex-col">
-                      <label
-                        htmlFor="startDate"
-                        className="text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Start Date
-                      </label>
-                      <input
-                        type="date"
-                        id="startDate"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="border border-gray-300 rounded-md p-2"
-                        disabled={isFiltering || loading}
-                      />
-                    </div>
-                    <div className="flex flex-col">
-                      <label
-                        htmlFor="endDate"
-                        className="text-sm font-medium text-gray-700 mb-1"
-                      >
-                        End Date
-                      </label>
-                      <input
-                        type="date"
-                        id="endDate"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="border border-gray-300 rounded-md p-2"
-                        disabled={isFiltering || loading}
-                      />
-                    </div>
-                    <div className="flex gap-2 self-end mt-6 md:mt-0">
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                      <div className="flex flex-col">
+                        <label
+                          htmlFor="startDate"
+                          className="text-sm font-medium text-gray-700 mb-1"
+                        >
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          id="startDate"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="border border-gray-300 rounded-md p-2"
+                          disabled={isFiltering || loading}
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label
+                          htmlFor="endDate"
+                          className="text-sm font-medium text-gray-700 mb-1"
+                        >
+                          End Date
+                        </label>
+                        <input
+                          type="date"
+                          id="endDate"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="border border-gray-300 rounded-md p-2"
+                          disabled={isFiltering || loading}
+                        />
+                      </div>
                       <button
                         onClick={debouncedHandleFilterOrders}
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
@@ -432,15 +483,40 @@ const AdminDashboard = () => {
                       >
                         Filter Orders
                       </button>
-                      <button
-                        onClick={clearFilters}
-                        className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
-                        disabled={isFiltering || loading}
-                      >
-                        Clear Filters
-                      </button>
                     </div>
+                    <button
+                      onClick={clearFilters}
+                      className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md self-end mt-4 md:mt-0"
+                      disabled={isFiltering || isSearching || loading}
+                    >
+                      Clear Filters
+                    </button>
                   </div>
+                  {(isFiltering || isSearching) && (
+                    <div className="p-6 text-center">
+                      <svg
+                        className="animate-spin h-5 w-5 text-[#1A3329] mx-auto"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      <p>{isFiltering ? "Filtering orders..." : "Searching orders..."}</p>
+                    </div>
+                  )}
                   {filteredOrders.length > 0 ? (
                     <table className="min-w-full">
                       <thead className="bg-gray-100">
@@ -476,12 +552,12 @@ const AdminDashboard = () => {
                       </tbody>
                     </table>
                   ) : (
-                    <EmptyState message="No Orders Found for Selected Filters" />
+                    <EmptyState message="No Orders Found for Selected Filters or Search" />
                   )}
                 </>
               ) : (
                 <div className="p-6">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb펀4">
                     <button
                       onClick={() => setSelectedOrder(null)}
                       className="text-[#1A3329] hover:text-[#2F6844]"
