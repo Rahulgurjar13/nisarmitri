@@ -52,7 +52,7 @@ const EmptyState = ({ message }) => (
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={1.5}
-        d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1M19 20a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0h4"
+        d="M19 20H5a2 2 0 01-2-2V6a2 gym2 0 012-2h10a2 2 0 012 2v1M19 20a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0h4"
       />
     </svg>
     <h3 className="text-xl font-medium text-gray-900 mb-2">{message}</h3>
@@ -68,6 +68,7 @@ const AdminDashboard = () => {
   const [error, setError] = useState(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [searchOrderId, setSearchOrderId] = useState("");
   const [isFiltering, setIsFiltering] = useState(false);
 
   const token = localStorage.getItem("token");
@@ -132,7 +133,7 @@ const AdminDashboard = () => {
 
     setIsFiltering(true);
     try {
-      if (!startDate && !endDate) {
+      if (!startDate && !endDate && !searchOrderId) {
         setFilteredOrders(orders);
         return;
       }
@@ -140,6 +141,7 @@ const AdminDashboard = () => {
       const params = {};
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
+      if (searchOrderId) params.orderId = searchOrderId;
 
       console.log("Filtering orders with params:", params);
       const response = await axios.get(`${BACKEND_URL}/api/orders`, {
@@ -153,23 +155,30 @@ const AdminDashboard = () => {
         error.response?.status,
         error.response?.data || error.message
       );
-      setError("Failed to filter orders");
+      setError("Failed to filter orders. Please try again.");
     } finally {
       setIsFiltering(false);
     }
-  }, [startDate, endDate, orders, token, isFiltering]);
+  }, [startDate, endDate, searchOrderId, orders, token, isFiltering]);
 
   const debouncedHandleFilterOrders = useCallback(
     debounce(handleFilterOrders, 500),
     [handleFilterOrders]
   );
 
+  const clearFilters = () => {
+    setStartDate("");
+    setEndDate("");
+    setSearchOrderId("");
+    setFilteredOrders(orders);
+  };
+
   useEffect(() => {
     debouncedHandleFilterOrders();
     return () => {
       debouncedHandleFilterOrders.cancel();
     };
-  }, [startDate, endDate, debouncedHandleFilterOrders]);
+  }, [startDate, endDate, searchOrderId, debouncedHandleFilterOrders]);
 
   const handleViewOrderDetails = (order) => setSelectedOrder(order);
 
@@ -368,6 +377,23 @@ const AdminDashboard = () => {
                   <div className="p-6 flex flex-col md:flex-row gap-4 mb-4">
                     <div className="flex flex-col">
                       <label
+                        htmlFor="searchOrderId"
+                        className="text-sm font-medium text-gray-700 mb-1"
+                      >
+                        Order ID
+                      </label>
+                      <input
+                        type="text"
+                        id="searchOrderId"
+                        value={searchOrderId}
+                        onChange={(e) => setSearchOrderId(e.target.value)}
+                        placeholder="Enter Order ID"
+                        className="border border-gray-300 rounded-md p-2"
+                        disabled={isFiltering || loading}
+                      />
+                    </div>
+                    <div className="flex flex-col">
+                      <label
                         htmlFor="startDate"
                         className="text-sm font-medium text-gray-700 mb-1"
                       >
@@ -398,13 +424,22 @@ const AdminDashboard = () => {
                         disabled={isFiltering || loading}
                       />
                     </div>
-                    <button
-                      onClick={debouncedHandleFilterOrders}
-                      className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md mt-6 md:mt-0 self-end"
-                      disabled={isFiltering || loading}
-                    >
-                      Filter Orders
-                    </button>
+                    <div className="flex gap-2 self-end mt-6 md:mt-0">
+                      <button
+                        onClick={debouncedHandleFilterOrders}
+                        className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
+                        disabled={isFiltering || loading}
+                      >
+                        Filter Orders
+                      </button>
+                      <button
+                        onClick={clearFilters}
+                        className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+                        disabled={isFiltering || loading}
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
                   </div>
                   {filteredOrders.length > 0 ? (
                     <table className="min-w-full">
@@ -441,7 +476,7 @@ const AdminDashboard = () => {
                       </tbody>
                     </table>
                   ) : (
-                    <EmptyState message="No Orders Found for Selected Date Range" />
+                    <EmptyState message="No Orders Found for Selected Filters" />
                   )}
                 </>
               ) : (
