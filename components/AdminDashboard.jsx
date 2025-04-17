@@ -129,21 +129,17 @@ const AdminDashboard = () => {
     };
   }, [token, stableNavigate]);
 
-  const handleFilterOrders = useCallback(async () => {
+  const handleFilterOrders = useCallback(async (params) => {
     if (isFiltering) return;
 
     // Skip filtering if no date parameters are provided
-    if (!startDate && !endDate) {
+    if (!params.startDate && !params.endDate) {
       setFilteredOrders(orders);
       return;
     }
 
     setIsFiltering(true);
     try {
-      const params = {};
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
-
       console.log("Filtering orders with params:", JSON.stringify(params));
       const response = await axios.get(`${BACKEND_URL}/api/orders`, {
         params,
@@ -160,21 +156,20 @@ const AdminDashboard = () => {
     } finally {
       setIsFiltering(false);
     }
-  }, [startDate, endDate, orders, token, isFiltering]);
+  }, [orders, token, isFiltering]);
 
-  const handleSearchOrders = useCallback(async () => {
+  const handleSearchOrders = useCallback(async (orderId) => {
     if (isSearching) return;
 
     // Skip searching if no order ID is provided
-    if (!searchOrderId) {
+    if (!orderId) {
       setFilteredOrders(orders);
       return;
     }
 
     setIsSearching(true);
     try {
-      const params = { orderId: searchOrderId };
-
+      const params = { orderId };
       console.log("Searching orders with params:", JSON.stringify(params));
       const response = await axios.get(`${BACKEND_URL}/api/orders`, {
         params,
@@ -191,15 +186,15 @@ const AdminDashboard = () => {
     } finally {
       setIsSearching(false);
     }
-  }, [searchOrderId, orders, token, isSearching]);
+  }, [orders, token, isSearching]);
 
   const debouncedHandleFilterOrders = useCallback(
-    debounce(handleFilterOrders, 500, { leading: false, trailing: true }),
+    debounce((params) => handleFilterOrders(params), 500, { leading: false, trailing: true }),
     [handleFilterOrders]
   );
 
   const debouncedHandleSearchOrders = useCallback(
-    debounce(handleSearchOrders, 500, { leading: false, trailing: true }),
+    debounce((orderId) => handleSearchOrders(orderId), 500, { leading: false, trailing: true }),
     [handleSearchOrders]
   );
 
@@ -212,11 +207,17 @@ const AdminDashboard = () => {
 
   // Trigger date filtering when date inputs change
   useEffect(() => {
+    const params = {};
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+
+    // Only trigger if at least one date is set
     if (startDate || endDate) {
-      debouncedHandleFilterOrders();
+      debouncedHandleFilterOrders(params);
     } else {
       setFilteredOrders(orders); // Reset to all orders if no date filters
     }
+
     return () => {
       debouncedHandleFilterOrders.cancel();
     };
@@ -436,7 +437,7 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <button
-                        onClick={debouncedHandleSearchOrders}
+                        onClick={() => debouncedHandleSearchOrders(searchOrderId)}
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
                         disabled={isSearching || loading}
                       >
@@ -477,7 +478,7 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <button
-                        onClick={debouncedHandleFilterOrders}
+                        onClick={() => debouncedHandleFilterOrders({ startDate, endDate })}
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
                         disabled={isFiltering || loading}
                       >
@@ -557,7 +558,7 @@ const AdminDashboard = () => {
                 </>
               ) : (
                 <div className="p-6">
-                  <div className="flex justify-between items-center mb펀4">
+                  <div className="flex justify-between items-center mb-4">
                     <button
                       onClick={() => setSelectedOrder(null)}
                       className="text-[#1A3329] hover:text-[#2F6844]"
