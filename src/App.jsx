@@ -11,9 +11,6 @@ import ContactPage from "../components/ContactPage";
 import AboutUsPage from "../components/AboutUs";
 import CheckoutPage from "../components/CheckoutPage";
 
-
-
-
 import AdminDashboard from "../components/AdminDashboard";
 
 import Login from "../components/Login.jsx"; // Updated import: Capital "L" and explicit .jsx
@@ -21,6 +18,7 @@ import PrivacyPolicy from "../components/PrivacyPolicy.jsx";
 import TermsAndConditions from "../components/TermsAndConditions.jsx";
 import ServicesPage from "../components/ServicesPage.jsx";
 import WasteManagementPage from "../components/WasteManagementPage.jsx";
+import Right from "../components/Right.jsx";
 
 // ProtectedRoute component to restrict access to admin-only routes
 const ProtectedRoute = ({ children }) => {
@@ -48,14 +46,13 @@ function App() {
         <Route path="/about" element={<AboutUsPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/privacy" element={<PrivacyPolicy/>} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+       
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/waste-management" element={<WasteManagementPage />} />
-       
         <Route path="/terms-condition" element={<TermsAndConditions />} />
-      
-        <Route path="/login" element={<Login />} /> {/* Removed redundant <Login></Login> syntax */}
-
+        <Route path="/login" element={<Login />} />{" "}
+        {/* Removed redundant <Login></Login> syntax */}
         {/* Admin-Only Routes */}
         <Route
           path="/admin"
@@ -65,8 +62,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-
         {/* Fallback Route for 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

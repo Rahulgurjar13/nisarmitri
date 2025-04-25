@@ -31,7 +31,7 @@ const CheckoutPage = () => {
       state: 'Uttar Pradesh',
       city: 'Gautam Buddha Nagar',
     },
-    paymentMethod: 'UPI',
+    paymentMethod: 'COD', // Default to COD
   });
   const [stateSearch, setStateSearch] = useState('');
   const [showStateSuggestions, setShowStateSuggestions] = useState(false);
@@ -187,7 +187,7 @@ const CheckoutPage = () => {
 
       setOrder(response.data.order);
 
-      if (formData.paymentMethod !== 'COD') {
+      if (formData.paymentMethod === 'Razorpay') {
         const options = {
           key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'your_razorpay_key_id',
           amount: response.data.order.total * 100,
@@ -226,7 +226,7 @@ const CheckoutPage = () => {
           setError('Payment failed. Please try again.');
         });
         rzp.open();
-      } else {
+      } else if (formData.paymentMethod === 'COD') {
         setStep(3);
       }
     } catch (error) {
@@ -729,38 +729,18 @@ const CheckoutPage = () => {
                       <input
                         type="radio"
                         name="paymentMethod"
-                        value="UPI"
-                        checked={formData.paymentMethod === 'UPI'}
+                        value="Razorpay"
+                        checked={formData.paymentMethod === 'Razorpay'}
                         onChange={handleChange}
                         className="form-radio h-5 w-5 text-[#1A3329]"
-                        id="payment-upi"
+                        id="payment-razorpay"
                       />
                       <div className="ml-3">
                         <span className="block font-medium text-gray-900">
-                          UPI Payment
+                          Razorpay
                         </span>
                         <span className="block text-sm text-gray-500">
-                          Pay using Google Pay, PhonePe, or any UPI app
-                        </span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="Card"
-                        checked={formData.paymentMethod === 'Card'}
-                        onChange={handleChange}
-                        className="form-radio h-5 w-5 text-[#1A3329]"
-                        id="payment-card"
-                      />
-                      <div className="ml-3">
-                        <span className="block font-medium text-gray-900">
-                          Credit/Debit Card
-                        </span>
-                        <span className="block text-sm text-gray-500">
-                          Pay using Visa, MasterCard, or RuPay
+                          Pay using Razorpay (UPI, Cards, Netbanking, etc.)
                         </span>
                       </div>
                     </label>
