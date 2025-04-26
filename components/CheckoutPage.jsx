@@ -4,6 +4,7 @@ import axios from 'axios';
 import Footer from './Footer';
 
 const BACKEND_URL = 'https://backendforshop.onrender.com';
+const FRONTEND_URL = 'https://www.nisargmaitri.in';
 
 const CheckoutPage = () => {
   const location = useLocation();
@@ -13,6 +14,7 @@ const CheckoutPage = () => {
   const [step, setStep] = useState(location.state?.step || 1);
   const [order, setOrder] = useState(location.state?.order || null);
   const [loading, setLoading] = useState(false);
+  const [couponLoading, setCouponLoading] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
     customer: { firstName: '', lastName: '', email: '', phone: '' },
@@ -40,6 +42,14 @@ const CheckoutPage = () => {
     (sum, item) => sum + item.price * item.quantity,
     0
   );
+
+  // Scroll to a section by ID
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   useEffect(() => {
     let shippingCost = 80;
@@ -69,6 +79,12 @@ const CheckoutPage = () => {
     }
   }, [cartItems, navigate]);
 
+  useEffect(() => {
+    if (error) {
+      scrollToSection('error-message');
+    }
+  }, [error]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     const path = name.split('.');
@@ -84,14 +100,16 @@ const CheckoutPage = () => {
     }
   };
 
-  const applyCoupon = () => {
+  const applyCoupon = async () => {
+    setCouponLoading(true);
+    setError(null);
+
     if (formData.coupon.code.toUpperCase() === 'FREESHIPPING') {
       setFormData((prev) => ({
         ...prev,
         shippingMethod: { ...prev.shippingMethod, cost: 0 },
         coupon: { code: 'FREESHIPPING', discount: prev.shippingMethod.cost },
       }));
-      setError(null);
     } else {
       let shippingCost = 80;
       if (subtotal >= 800) {
@@ -107,6 +125,7 @@ const CheckoutPage = () => {
       }));
       setError('Invalid coupon code');
     }
+    setCouponLoading(false);
   };
 
   const handleStep1Submit = (e) => {
@@ -160,7 +179,7 @@ const CheckoutPage = () => {
         items,
         date: new Date().toISOString(),
         total,
-        paymentStatus: 'pending'
+        paymentStatus: 'Pending' // Match models/order.js enum
       };
 
       const response = await axios.post(
@@ -182,9 +201,9 @@ const CheckoutPage = () => {
             `${BACKEND_URL}/api/orders/initiate-phonepe-payment`,
             {
               orderId: response.data.order.orderId,
-              amount: response.data.order.total * 100,
+              amount: Math.round(total * 100), // Convert to paise and ensure integer
               customer: formData.customer,
-              redirectUrl: `${window.location.origin}/payment-callback`,
+              redirectUrl: `${FRONTEND_URL}/payment-callback`,
               mobileNumber: formData.customer.phone
             },
             {
@@ -205,11 +224,10 @@ const CheckoutPage = () => {
 
           window.location.href = paymentUrl;
         } catch (paymentError) {
-          console.error('PhonePe payment initiation failed:', paymentError);
-          setError('Failed to initiate PhonePe payment. Please try again or use COD.');
-          await axios.put(`${BACKEND_URL}/api/orders/${response.data.order.orderId}`, {
-            paymentStatus: 'failed'
-          });
+          console.error('PhonePe payment initiation failed:', paymentError.response?.data || paymentError.message);
+          setError('Failed to initiate PhonePe payment. Please try again or select Cash on Delivery.');
+          // Remove the PUT request to avoid 404
+          setStep(2); // Allow user to retry or change payment method
         }
       } else if (formData.paymentMethod === 'COD') {
         setStep(3);
@@ -276,6 +294,12 @@ const CheckoutPage = () => {
               {
                 orderId: pendingTransaction.orderId,
                 transactionId: transactionId
+              },
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                timeout: 10000
               }
             );
 
@@ -289,14 +313,18 @@ const CheckoutPage = () => {
               });
             } else {
               setError('Payment verification failed. Please contact support.');
-              navigate('/checkout');
+              navigate('/checkout', { state: { step: 2 } });
             }
           } catch (error) {
+            console.error('Payment verification error:', error.response?.data || error.message);
             setError('Payment verification error. Please try again or contact support.');
-            navigate('/checkout');
+            navigate('/checkout', { state: { step: 2 } });
           } finally {
             setLoading(false);
           }
+        } else {
+          setError('Invalid transaction data. Please try again.');
+          navigate('/checkout', { state: { step: 2 } });
         }
       };
 
@@ -390,7 +418,7 @@ const CheckoutPage = () => {
 
         <div className="max-w-6xl mx-auto">
           {error && (
-            <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-md" role="alert">
+            <div id="error-message" className="mb-6 p-4 bg-red-100 text-red-700 rounded-md" role="alert">
               {error}
             </div>
           )}
@@ -578,7 +606,7 @@ const CheckoutPage = () => {
                         title="6 digit pincode"
                         className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
                         aria-required="true"
-                        aria-describedby="phone-desc"
+                        aria-describedby="pincode-desc"
                       />
                       <p id="pincode-desc" className="text-xs text-gray-500 mt-1">
                         Enter a 6-digit pincode
@@ -778,14 +806,17 @@ const CheckoutPage = () => {
                       }
                       className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
                       aria-label="Coupon code"
+                      disabled={couponLoading}
                     />
                     <button
                       type="button"
                       onClick={applyCoupon}
-                      className="bg-[#1A3329] text-white px-3 py-2 rounded-md hover:bg-[#2F6844] transition-colors duration-300 text-sm"
-                      disabled={loading}
+                      className={`bg-[#1A3329] text-white px-3 py-2 rounded-md hover:bg-[#2F6844] transition-colors duration-300 text-sm ${
+                        couponLoading ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                      disabled={couponLoading}
                     >
-                      Apply
+                      {couponLoading ? 'Applying...' : 'Apply'}
                     </button>
                   </div>
                   {formData.coupon.discount > 0 && (
