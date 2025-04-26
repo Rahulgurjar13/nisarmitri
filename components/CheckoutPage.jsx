@@ -145,8 +145,14 @@ const CheckoutPage = () => {
     e.preventDefault();
     const { customer, shippingAddress } = formData;
 
+    console.log('Step 1 Form Data:', JSON.stringify(formData, null, 2)); // Debug log
+
     if (!cartItems.length) {
       setError('Your cart is empty');
+      return;
+    }
+    if (!customer.firstName || !customer.lastName) {
+      setError('Please enter your full name');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
@@ -159,10 +165,6 @@ const CheckoutPage = () => {
     }
     if (!/^[0-9]{6}$/.test(shippingAddress.pincode)) {
       setError('Please enter a valid 6-digit pincode');
-      return;
-    }
-    if (!customer.firstName || !customer.lastName) {
-      setError('Please enter your full name');
       return;
     }
     if (!shippingAddress.address1 || !shippingAddress.city || !shippingAddress.state) {
@@ -199,6 +201,8 @@ const CheckoutPage = () => {
         paymentStatus: 'Pending',
       };
 
+      console.log('Order Data:', JSON.stringify(orderData, null, 2)); // Debug log
+
       const orderResponse = await withRetry(() =>
         axios.post(`${BACKEND_URL}/api/orders`, orderData, {
           headers: {
@@ -208,27 +212,61 @@ const CheckoutPage = () => {
         })
       );
 
+      if (!orderResponse.data.order?.orderId) {
+        throw new Error('Order creation failed: Missing orderId');
+      }
+
       setOrder(orderResponse.data.order);
 
       if (formData.paymentMethod === 'PhonePe') {
         try {
+          const phonePePayload = {
+            orderId: orderResponse.data.order.orderId,
+            amount: Math.round(total * 100), // Convert to paise
+            customer: {
+              firstName: formData.customer.firstName,
+              lastName: formData.customer.lastName,
+              email: formData.customer.email,
+              phone: formData.customer.phone,
+            },
+            merchantUserId: formData.customer.email ? `MUID-${formData.customer.email}` : `MUID-${formData.customer.phone}`,
+            redirectUrl: `${FRONTEND_URL}/payment-callback`,
+            callbackUrl: `${BACKEND_URL}/api/orders/phonepe-callback`,
+            mobileNumber: formData.customer.phone,
+          };
+
+          // Log payload for debugging
+          console.log('PhonePe Payload:', JSON.stringify(phonePePayload, null, 2));
+
+          // Validate payload
+          if (
+            !phonePePayload.orderId ||
+            !phonePePayload.amount ||
+            !phonePePayload.customer?.firstName ||
+            !phonePePayload.customer?.lastName ||
+            !phonePePayload.customer?.email ||
+            !phonePePayload.customer?.phone ||
+            !phonePePayload.merchantUserId ||
+            !phonePePayload.redirectUrl ||
+            !phonePePayload.callbackUrl ||
+            !phonePePayload.mobileNumber
+          ) {
+            console.error('Invalid PhonePe payload:', phonePePayload);
+            throw new Error('Incomplete payment information. Please check your details and try again.');
+          }
+
+          // Validate formats
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(phonePePayload.customer.email)) {
+            throw new Error('Invalid email address');
+          }
+          if (!/^[0-9]{10}$/.test(phonePePayload.mobileNumber)) {
+            throw new Error('Invalid phone number (must be 10 digits)');
+          }
+
           const phonePeResponse = await withRetry(() =>
             axios.post(
               `${BACKEND_URL}/api/orders/initiate-phonepe-payment`,
-              {
-                orderId: orderResponse.data.order.orderId,
-                amount: Math.round(total * 100), // Convert to paise
-                customer: {
-                  firstName: formData.customer.firstName,
-                  lastName: formData.customer.lastName,
-                  email: formData.customer.email,
-                  phone: formData.customer.phone,
-                },
-                merchantUserId: `MUID-${formData.customer.email}`, // Unique user ID
-                redirectUrl: `${FRONTEND_URL}/payment-callback`,
-                callbackUrl: `${BACKEND_URL}/api/orders/phonepe-callback`,
-                mobileNumber: formData.customer.phone,
-              },
+              phonePePayload,
               {
                 headers: {
                   'Content-Type': 'application/json',
@@ -239,6 +277,10 @@ const CheckoutPage = () => {
           );
 
           const { paymentUrl, transactionId } = phonePeResponse.data;
+
+          if (!paymentUrl || !transactionId) {
+            throw new Error('Invalid PhonePe response: Missing paymentUrl or transactionId');
+          }
 
           localStorage.setItem(
             'pendingTransaction',
@@ -254,6 +296,7 @@ const CheckoutPage = () => {
           console.error('PhonePe payment initiation failed:', paymentError.response?.data || paymentError.message);
           setError(
             paymentError.response?.data?.error ||
+              paymentError.message ||
               'Failed to initiate PhonePe payment. Please try again or select Cash on Delivery.'
           );
           setStep(2); // Allow retry or change payment method
@@ -322,7 +365,7 @@ const CheckoutPage = () => {
           return;
         }
 
-        // Validate transaction age (e.g., 15 minutes)
+        // Validate transaction age (15 minutes)
         const transactionAge = Date.now() - pendingTransaction.timestamp;
         if (transactionAge > 15 * 60 * 1000) {
           setError('Transaction expired. Please initiate a new payment.');
@@ -408,7 +451,7 @@ const CheckoutPage = () => {
     );
   };
 
-  // Render PaymentCallback if on /payment-callback route
+  // Render PaymentCallback for /payment-callback route
   if (location.pathname === '/payment-callback') {
     return <PaymentCallback />;
   }
