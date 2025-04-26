@@ -66,17 +66,6 @@ const CheckoutPage = () => {
     }));
   }, [subtotal, formData.coupon.code]);
 
-  // Load Razorpay SDK
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
-
   // Redirect to cart if empty
   useEffect(() => {
     if (!cartItems || cartItems.length === 0) {
@@ -187,45 +176,25 @@ const CheckoutPage = () => {
 
       setOrder(response.data.order);
 
-      if (formData.paymentMethod === 'Razorpay') {
-        const options = {
-          key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'your_razorpay_key_id',
-          amount: response.data.order.total * 100,
-          currency: 'INR',
-          name: 'NISARGMAITRI',
-          order_id: response.data.razorpayOrder?.id,
-          handler: async function (paymentResponse) {
-            try {
-              // Verify payment
-              const verifyResponse = await axios.post(
-                `${BACKEND_URL}/api/orders/verify-payment`,
-                {
-                  razorpay_order_id: paymentResponse.razorpay_order_id,
-                  razorpay_payment_id: paymentResponse.razorpay_payment_id,
-                  razorpay_signature: paymentResponse.razorpay_signature,
-                  orderId: response.data.order.orderId,
-                }
-              );
-              setOrder(verifyResponse.data.order);
-              setStep(3);
-            } catch (error) {
-              console.error('Payment verification failed:', error.response?.data || error.message);
-              setError('Payment verification failed. Please contact support.');
-            }
-          },
-          prefill: {
-            name: `${formData.customer.firstName} ${formData.customer.lastName}`,
-            email: formData.customer.email,
-            contact: formData.customer.phone,
-          },
-          theme: { color: '#1A3329' },
-        };
+      if (formData.paymentMethod === 'PhonePe') {
+        // Initiate PhonePe payment
+        const phonePeResponse = await axios.post(
+          `${BACKEND_URL}/api/orders/initiate-phonepe-payment`,
+          {
+            orderId: response.data.order.orderId,
+            amount: response.data.order.total * 100, // Convert to paise
+            customer: formData.customer,
+          }
+        );
 
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (response) {
-          setError('Payment failed. Please try again.');
-        });
-        rzp.open();
+        const { paymentUrl } = phonePeResponse.data;
+
+        // Redirect to PhonePe payment URL
+        window.location.href = paymentUrl;
+
+        // Note: After redirection, PhonePe will redirect back to a callback URL (configured on backend).
+        // The backend should verify the payment and update the order status.
+        // For simplicity, we'll assume the next step happens after manual verification here.
       } else if (formData.paymentMethod === 'COD') {
         setStep(3);
       }
@@ -729,18 +698,18 @@ const CheckoutPage = () => {
                       <input
                         type="radio"
                         name="paymentMethod"
-                        value="Razorpay"
-                        checked={formData.paymentMethod === 'Razorpay'}
+                        value="PhonePe"
+                        checked={formData.paymentMethod === 'PhonePe'}
                         onChange={handleChange}
                         className="form-radio h-5 w-5 text-[#1A3329]"
-                        id="payment-razorpay"
+                        id="payment-phonepe"
                       />
                       <div className="ml-3">
                         <span className="block font-medium text-gray-900">
-                          Razorpay
+                          PhonePe
                         </span>
                         <span className="block text-sm text-gray-500">
-                          Pay using Razorpay (UPI, Cards, Netbanking, etc.)
+                          Pay using PhonePe (UPI, Cards, etc.)
                         </span>
                       </div>
                     </label>
@@ -759,7 +728,7 @@ const CheckoutPage = () => {
                         <span className="block font-medium text-gray-900">
                           Cash on Delivery
                         </span>
-                        <span className="block text-sm text-gray-500">
+                        <span className pours="block text-sm text-gray-500">
                           Pay when you receive your order
                         </span>
                       </div>
