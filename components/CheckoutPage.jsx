@@ -4,7 +4,6 @@ import axios from 'axios';
 import Footer from './Footer';
 
 const BACKEND_URL = 'https://backendforshop.onrender.com';
-const FRONTEND_URL = 'https://www.nisargmaitri.in';
 
 // Retry utility for API calls
 const withRetry = async (fn, retries = 3, delay = 1000) => {
@@ -217,68 +216,7 @@ const CheckoutPage = () => {
       }
 
       setOrder(orderResponse.data.order);
-
-      if (formData.paymentMethod === 'PhonePe') {
-        try {
-          // Construct PhonePe payment payload
-          const phonePePayload = {
-            merchantTransactionId: `MT${orderResponse.data.order.orderId}`, // Unique transaction ID
-            amount: Math.round(total * 100), // Amount in paise
-            mobileNumber: formData.customer.phone,
-            redirectUrl: `${FRONTEND_URL}/payment-callback`,
-            callbackUrl: `${BACKEND_URL}/api/orders/phonepe-callback`,
-            merchantUserId: `MUID-${formData.customer.email || formData.customer.phone}`,
-            paymentInstrument: {
-              type: 'PAY_PAGE', // Using Pay Page for web flow
-            },
-          };
-
-          // Log payload for debugging
-          console.log('PhonePe Payload:', JSON.stringify(phonePePayload, null, 2));
-
-          // Basic  Make API request to initiate PhonePe payment
-          const phonePeResponse = await withRetry(() =>
-            axios.post(
-              `${BACKEND_URL}/api/orders/initiate-phonepe-payment`,
-              phonePePayload,
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                timeout: 15000,
-              }
-            )
-          );
-
-          const { paymentUrl, transactionId } = phonePeResponse.data;
-
-          if (!paymentUrl || !transactionId) {
-            throw new Error('Invalid PhonePe response: Missing paymentUrl or transactionId');
-          }
-
-          // Store transaction details for verification
-          localStorage.setItem(
-            'pendingTransaction',
-            JSON.stringify({
-              orderId: orderResponse.data.order.orderId,
-              transactionId,
-              timestamp: Date.now(),
-            })
-          );
-
-          // Redirect to PhonePe payment page
-          window.location.href = paymentUrl;
-        } catch (paymentError) {
-          console.error('PhonePe payment initiation failed:', paymentError.response?.data || paymentError.message);
-          setError(
-            paymentError.response?.data?.message ||
-              'Failed to initiate PhonePe payment. Please try again or select Cash on Delivery.'
-          );
-          setStep(2); // Allow retry or change payment method
-        }
-      } else if (formData.paymentMethod === 'COD') {
-        setStep(3);
-      }
+      setStep(3);
     } catch (error) {
       console.error('Order processing failed:', error.response?.data || error.message);
       setError(
@@ -326,110 +264,6 @@ const CheckoutPage = () => {
   const filteredStates = indianStates.filter((state) =>
     state.toLowerCase().includes(stateSearch.toLowerCase())
   );
-
-  const PaymentCallback = () => {
-    useEffect(() => {
-      const verifyPayment = async () => {
-        const urlParams = new URLSearchParams(location.search);
-        const transactionId = urlParams.get('transactionId');
-        const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
-
-        if (!pendingTransaction || !transactionId || pendingTransaction.transactionId !== transactionId) {
-          setError('Invalid or missing transaction data. Please try again.');
-          navigate('/checkout', { state: { step: 2 } });
-          return;
-        }
-
-        // Validate transaction age (15 minutes)
-        const transactionAge = Date.now() - pendingTransaction.timestamp;
-        if (transactionAge > 15 * 60 * 1000) {
-          setError('Transaction expired. Please initiate a new payment.');
-          localStorage.removeItem('pendingTransaction');
-          navigate('/checkout', { state: { step: 2 } });
-          return;
-        }
-
-        try {
-          setLoading(true);
-          const response = await withRetry(() =>
-            axios.post(
-              `${BACKEND_URL}/api/orders/verify-phonepe-payment`,
-              {
-                orderId: pendingTransaction.orderId,
-                transactionId,
-              },
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                timeout: 10000,
-              }
-            )
-          );
-
-          if (response.data.success) {
-            setOrder(response.data.order);
-            localStorage.removeItem('pendingTransaction');
-            navigate('/checkout', {
-              state: {
-                order: response.data.order,
-                step: 3,
-              },
-            });
-          } else {
-            setError(
-              response.data.error || 'Payment verification failed. Please contact support.'
-            );
-            navigate('/checkout', { state: { step: 2 } });
-          }
-        } catch (error) {
-          console.error('Payment verification error:', error.response?.data || error.message);
-          setError(
-            error.response?.data?.error ||
-              error.response?.data?.details ||
-              'Payment verification error. Please try again or contact support.'
-          );
-          navigate('/checkout', { state: { step: 2 } });
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      verifyPayment();
-    }, []);
-
-    return (
-      <div className="text-center py-8">
-        <h2 className="text-2xl font-bold">Verifying Payment...</h2>
-        <p>Please wait while we confirm your payment.</p>
-        {loading && (
-          <svg
-            className="animate-spin h-8 w-8 mx-auto mt-4 text-[#1A3329]"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        )}
-      </div>
-    );
-  };
-
-  // Render PaymentCallback for /payment-callback route
-  if (location.pathname === '/payment-callback') {
-    return <PaymentCallback />;
-  }
 
   return (
     <div className="bg-gray-50 min-h-screen font-serif">
@@ -715,7 +549,7 @@ const CheckoutPage = () => {
                         GST Number
                       </label>
                       <input
-                        id="gstNumber"
+                        id="gst ROUNDNumber"
                         type="text"
                         name="gstDetails.gstNumber"
                         value={formData.gstDetails.gstNumber}
@@ -789,24 +623,6 @@ const CheckoutPage = () => {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <fieldset className="space-y-4">
                     <legend className="sr-only">Payment Method</legend>
-                    <label className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="PhonePe"
-                        checked={formData.paymentMethod === 'PhonePe'}
-                        onChange={handleChange}
-                        className="form-radio h-5 w-5 text-[#1A3329]"
-                        id="payment-phonepe"
-                      />
-                      <div className="ml-3">
-                        <span className="block font-medium text-gray-900">PhonePe</span>
-                        <span className="block text-sm text-gray-500">
-                          Pay using PhonePe (UPI, Cards, etc.)
-                        </span>
-                      </div>
-                    </label>
-
                     <label className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
@@ -976,11 +792,6 @@ const CheckoutPage = () => {
                 <p className="text-gray-800 font-medium mt-2">
                   Order ID: <span className="font-bold">{order.orderId}</span>
                 </p>
-                {order.paymentMethod === 'PhonePe' && order.phonepeTransactionId && (
-                  <p className="text-gray-800 font-medium mt-1">
-                    Transaction ID: <span className="font-bold">{order.phonepeTransactionId}</span>
-                  </p>
-                )}
               </div>
 
               <div className="border-t border-b border-gray-200 py-6 mb-6">
