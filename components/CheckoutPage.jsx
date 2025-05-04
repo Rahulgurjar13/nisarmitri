@@ -213,26 +213,26 @@ const CheckoutPage = () => {
 
       setOrder(orderResponse.data.order);
 
-      if (formData.paymentMethod === 'PhonePe') {
+      if (formData.paymentMethod === 'Razorpay') {
         try {
-          const phonePePayload = {
-            merchantTransactionId: `MT${orderResponse.data.order.orderId}`,
+          const razorpayPayload = {
+            orderId: orderResponse.data.order.orderId,
             amount: Math.round(total * 100), // Amount in paise
-            mobileNumber: formData.customer.phone,
-            redirectUrl: `${FRONTEND_URL}/payment-callback?transactionId=MT${orderResponse.data.order.orderId}`,
-            callbackUrl: `${BACKEND_URL}/api/orders/phonepe-callback`,
-            merchantUserId: `MUID-${formData.customer.email || formData.customer.phone}`,
-            paymentInstrument: {
-              type: 'PAY_PAGE',
+            currency: 'INR',
+            receipt: `receipt_${orderResponse.data.order.orderId}`,
+            customer: {
+              name: `${formData.customer.firstName} ${formData.customer.lastName}`,
+              email: formData.customer.email,
+              contact: formData.customer.phone,
             },
           };
 
-          console.log('PhonePe Payload:', JSON.stringify(phonePePayload, null, 2));
+          console.log('Razorpay Payload:', JSON.stringify(razorpayPayload, null, 2));
 
-          const phonePeResponse = await withRetry(() =>
+          const razorpayResponse = await withRetry(() =>
             axios.post(
-              `${BACKEND_URL}/api/orders/initiate-phonepe-payment`,
-              phonePePayload,
+              `${BACKEND_URL}/api/orders/initiate-razorpay-payment`,
+              razorpayPayload,
               {
                 headers: {
                   'Content-Type': 'application/json',
@@ -242,27 +242,64 @@ const CheckoutPage = () => {
             )
           );
 
-          const { paymentUrl, transactionId } = phonePeResponse.data;
+          const { razorpayOrderId, keyId } = razorpayResponse.data;
 
-          if (!paymentUrl || !transactionId) {
-            throw new Error('Invalid PhonePe response: Missing paymentUrl or transactionId');
+          if (!razorpayOrderId || !keyId) {
+            throw new Error('Invalid Razorpay response: Missing orderId or keyId');
           }
 
+          // Store pending transaction
           localStorage.setItem(
             'pendingTransaction',
             JSON.stringify({
               orderId: orderResponse.data.order.orderId,
-              transactionId,
+              razorpayOrderId,
               timestamp: Date.now(),
             })
           );
 
-          window.location.href = paymentUrl;
+          // Initialize Razorpay checkout
+          const options = {
+            key: keyId,
+            amount: total * 100,
+            currency: 'INR',
+            name: 'NISARGMAITRI',
+            description: `Order #${orderResponse.data.order.orderId}`,
+            order_id: razorpayOrderId,
+            handler: function (response) {
+              // Handle successful payment
+              navigate('/payment-callback', {
+                state: {
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                },
+              });
+            },
+            prefill: {
+              name: `${formData.customer.firstName} ${formData.customer.lastName}`,
+              email: formData.customer.email,
+              contact: formData.customer.phone,
+            },
+            theme: {
+              color: '#1A3329',
+            },
+            modal: {
+              ondismiss: function () {
+                setError('Payment was cancelled. Please try again.');
+                setStep(2);
+                setLoading(false);
+              },
+            },
+          };
+
+          const rzp = new window.Razorpay(options);
+          rzp.open();
         } catch (paymentError) {
-          console.error('PhonePe payment initiation failed:', paymentError.response?.data || paymentError.message);
+          console.error('Razorpay payment initiation failed:', paymentError.response?.data || paymentError.message);
           setError(
             paymentError.response?.data?.message ||
-              'Failed to initiate PhonePe payment. Please try again or select Cash on Delivery.'
+              'Failed to initiate Razorpay payment. Please try again or select Cash on Delivery.'
           );
           setStep(2);
         }
@@ -320,11 +357,16 @@ const CheckoutPage = () => {
   const PaymentCallback = () => {
     useEffect(() => {
       const verifyPayment = async () => {
-        const urlParams = new URLSearchParams(location.search);
-        const transactionId = urlParams.get('transactionId');
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = location.state || {};
         const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
 
-        if (!pendingTransaction || !transactionId || pendingTransaction.transactionId !== transactionId) {
+        if (
+          !pendingTransaction ||
+          !razorpay_payment_id ||
+          !razorpay_order_id ||
+          !razorpay_signature ||
+          pendingTransaction.razorpayOrderId !== razorpay_order_id
+        ) {
           setError('Invalid or missing transaction data. Please try again.');
           navigate('/checkout', { state: { step: 2 } });
           return;
@@ -342,10 +384,12 @@ const CheckoutPage = () => {
           setLoading(true);
           const response = await withRetry(() =>
             axios.post(
-              `${BACKEND_URL}/api/orders/verify-phonepe-payment`,
+              `${BACKEND_URL}/api/orders/verify-razorpay-payment`,
               {
                 orderId: pendingTransaction.orderId,
-                transactionId,
+                razorpay_payment_id,
+                razorpay_order_id,
+                razorpay_signature,
               },
               {
                 headers: {
@@ -414,6 +458,17 @@ const CheckoutPage = () => {
       </div>
     );
   };
+
+  // Load Razorpay SDK dynamically
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   if (location.pathname === '/payment-callback') {
     return <PaymentCallback />;
@@ -781,16 +836,16 @@ const CheckoutPage = () => {
                       <input
                         type="radio"
                         name="paymentMethod"
-                        value="PhonePe"
-                        checked={formData.paymentMethod === 'PhonePe'}
+                        value="Razorpay"
+                        checked={formData.paymentMethod === 'Razorpay'}
                         onChange={handleChange}
                         className="form-radio h-5 w-5 text-[#1A3329]"
-                        id="payment-phonepe"
+                        id="payment-razorpay"
                       />
                       <div className="ml-3">
-                        <span className="block font-medium text-gray-900">PhonePe</span>
+                        <span className="block font-medium text-gray-900">Razorpay</span>
                         <span className="block text-sm text-gray-500">
-                          Pay using PhonePe (UPI, Cards, etc.)
+                          Pay using Razorpay (UPI, Cards, Netbanking, etc.)
                         </span>
                       </div>
                     </label>
@@ -964,9 +1019,9 @@ const CheckoutPage = () => {
                 <p className="text-gray-800 font-medium mt-2">
                   Order ID: <span className="font-bold">{order.orderId}</span>
                 </p>
-                {order.paymentMethod === 'PhonePe' && order.transactionId && (
+                {order.paymentMethod === 'Razorpay' && order.paymentId && (
                   <p className="text-gray-800 font-medium mt-1">
-                    Transaction ID: <span className="font-bold">{order.transactionId}</span>
+                    Payment ID: <span className="font-bold">{order.paymentId}</span>
                   </p>
                 )}
               </div>
