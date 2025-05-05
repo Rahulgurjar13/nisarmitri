@@ -262,7 +262,7 @@ const ShopPage = () => {
       },
       {
         id: 5,
-        name: 'Bamboo Straws (Set of 6)',
+        name: 'Bamboo Straws (each of 40)',
         description: 'Reusable bamboo drinking straws with cleaning brush included.',
         price: 40,
         image: '/BAmboo (1).png',
@@ -278,9 +278,9 @@ const ShopPage = () => {
       },
       {
         id: 7,
-        name: 'Reusable Makeup Remover Pads',
-        description: 'Soft cotton reusable makeup remover pads with washing bag, pack of 8.',
-        price: 70,
+        name: 'Reusable Makeup Remover Pads(each of 70 rs)',
+        description: 'Soft cotton reusable makeup remover pads with washing bag .',
+        price: 70 ,
         image: '/makeupremove.jpeg',
         category: 'Zero Waste'
       },
@@ -304,7 +304,7 @@ const ShopPage = () => {
       {
         id: 10,
         name: 'Zero Waste Cutlery Set',
-        description: 'Portable bamboo cutlery set with knife, fork, spoon, chopsticks and straw in cotton pouch.',
+        description: 'Portable stainless steel cutlery set with knife, fork, spoon, chopsticks, and straw, neatly packed in a durable cotton pouch.',
         price: 199,
         image: '/cutlery_set.png',
         category: 'Zero Waste'

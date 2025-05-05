@@ -82,9 +82,9 @@ const LandingPage = () => {
       <main className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 flex flex-col md:flex-row items-center">
         <div className="w-full md:w-1/2 mb-8 md:mb-0 text-center md:text-left">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
-            Shop Recycled<br />
+          Shop Eco-friendly  <br />
             Products for a<br />
-            Greener India
+            Greener Planet
           </h1>
           <Link 
             to="/shop" 
