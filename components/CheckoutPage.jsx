@@ -173,6 +173,21 @@ const CheckoutPage = () => {
     setStep(2);
   };
 
+  const markOrderAsFailed = async (orderId) => {
+    try {
+      await withRetry(() =>
+        axios.post(
+          `${BACKEND_URL}/api/orders/mark-failed`,
+          { orderId },
+          { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+        )
+      );
+      console.log(`Marked order as failed: ${orderId}`);
+    } catch (error) {
+      console.error(`Failed to mark order ${orderId} as failed:`, error.message);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -266,15 +281,24 @@ const CheckoutPage = () => {
             name: 'NISARGMAITRI',
             description: `Order #${orderResponse.data.order.orderId}`,
             order_id: razorpayOrderId,
-            handler: function (response) {
-              // Handle successful payment
-              navigate('/payment-callback', {
-                state: {
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_signature: response.razorpay_signature,
-                },
-              });
+            handler: async function (response) {
+              try {
+                console.log('Razorpay payment response:', response);
+                navigate('/payment-callback', {
+                  state: {
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_signature: response.razorpay_signature,
+                    orderId: orderResponse.data.order.orderId, // Pass orderId for verification
+                  },
+                });
+              } catch (error) {
+                console.error('Razorpay handler error:', error);
+                await markOrderAsFailed(orderResponse.data.order.orderId);
+                setError('Payment processing failed. Please try again.');
+                setStep(2);
+                setLoading(false);
+              }
             },
             prefill: {
               name: `${formData.customer.firstName} ${formData.customer.lastName}`,
@@ -285,7 +309,8 @@ const CheckoutPage = () => {
               color: '#1A3329',
             },
             modal: {
-              ondismiss: function () {
+              ondismiss: async function () {
+                await markOrderAsFailed(orderResponse.data.order.orderId);
                 setError('Payment was cancelled. Please try again.');
                 setStep(2);
                 setLoading(false);
@@ -294,9 +319,17 @@ const CheckoutPage = () => {
           };
 
           const rzp = new window.Razorpay(options);
+          rzp.on('payment.failed', async function (response) {
+            console.error('Razorpay payment failed:', response.error);
+            await markOrderAsFailed(orderResponse.data.order.orderId);
+            setError(`Payment failed: ${response.error.description || 'Unknown error'}. Please try again.`);
+            setStep(2);
+            setLoading(false);
+          });
           rzp.open();
         } catch (paymentError) {
           console.error('Razorpay payment initiation failed:', paymentError.response?.data || paymentError.message);
+          await markOrderAsFailed(orderResponse.data.order.orderId);
           setError(
             paymentError.response?.data?.message ||
               'Failed to initiate Razorpay payment. Please try again or select Cash on Delivery.'
@@ -357,7 +390,7 @@ const CheckoutPage = () => {
   const PaymentCallback = () => {
     useEffect(() => {
       const verifyPayment = async () => {
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = location.state || {};
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, orderId } = location.state || {};
         const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
 
         if (
@@ -365,8 +398,11 @@ const CheckoutPage = () => {
           !razorpay_payment_id ||
           !razorpay_order_id ||
           !razorpay_signature ||
-          pendingTransaction.razorpayOrderId !== razorpay_order_id
+          !orderId ||
+          pendingTransaction.razorpayOrderId !== razorpay_order_id ||
+          pendingTransaction.orderId !== orderId
         ) {
+          await markOrderAsFailed(orderId || pendingTransaction?.orderId);
           setError('Invalid or missing transaction data. Please try again.');
           navigate('/checkout', { state: { step: 2 } });
           return;
@@ -374,6 +410,7 @@ const CheckoutPage = () => {
 
         const transactionAge = Date.now() - pendingTransaction.timestamp;
         if (transactionAge > 15 * 60 * 1000) {
+          await markOrderAsFailed(orderId);
           setError('Transaction expired. Please initiate a new payment.');
           localStorage.removeItem('pendingTransaction');
           navigate('/checkout', { state: { step: 2 } });
@@ -386,7 +423,7 @@ const CheckoutPage = () => {
             axios.post(
               `${BACKEND_URL}/api/orders/verify-razorpay-payment`,
               {
-                orderId: pendingTransaction.orderId,
+                orderId,
                 razorpay_payment_id,
                 razorpay_order_id,
                 razorpay_signature,
@@ -410,6 +447,7 @@ const CheckoutPage = () => {
               },
             });
           } else {
+            await markOrderAsFailed(orderId);
             setError(
               response.data.error || 'Payment verification failed. Please contact support.'
             );
@@ -417,6 +455,7 @@ const CheckoutPage = () => {
           }
         } catch (error) {
           console.error('Payment verification error:', error.response?.data || error.message);
+          await markOrderAsFailed(orderId);
           setError(
             error.response?.data?.error ||
               error.response?.data?.details ||
@@ -464,6 +503,10 @@ const CheckoutPage = () => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
+    script.onerror = () => {
+      setError('Failed to load Razorpay SDK. Please try again or select Cash on Delivery.');
+      setStep(2);
+    };
     document.body.appendChild(script);
     return () => {
       document.body.removeChild(script);
