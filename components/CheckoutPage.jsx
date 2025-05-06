@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import Footer from './Footer';
 
 const BACKEND_URL = 'https://backendforshop.onrender.com';
@@ -28,15 +24,8 @@ const CheckoutPage = () => {
   const navigate = useNavigate();
   const { cartItems } = location.state || { cartItems: [] };
 
-  // Initialize state from localStorage if location.state is unavailable
-  const [step, setStep] = useState(() => {
-    const savedState = localStorage.getItem('checkoutState');
-    return savedState ? JSON.parse(savedState).step : location.state?.step || 1;
-  });
-  const [order, setOrder] = useState(() => {
-    const savedState = localStorage.getItem('checkoutState');
-    return savedState ? JSON.parse(savedState).order : location.state?.order || null;
-  });
+  const [step, setStep] = useState(location.state?.step || 1);
+  const [order, setOrder] = useState(location.state?.order || null);
   const [loading, setLoading] = useState(false);
   const [couponLoading, setCouponLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -66,11 +55,6 @@ const CheckoutPage = () => {
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-
-  // Save step and order to localStorage
-  useEffect(() => {
-    localStorage.setItem('checkoutState', JSON.stringify({ step, order }));
-  }, [step, order]);
 
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
@@ -103,12 +87,9 @@ const CheckoutPage = () => {
 
   useEffect(() => {
     if (!cartItems || cartItems.length === 0) {
-      // Only redirect to /shop if not on step 3 (confirmation)
-      if (step !== 3) {
-        navigate('/shop');
-      }
+      navigate('/shop');
     }
-  }, [cartItems, navigate, step]);
+  }, [cartItems, navigate]);
 
   useEffect(() => {
     if (error) {
@@ -141,13 +122,21 @@ const CheckoutPage = () => {
         shippingMethod: { ...prev.shippingMethod, cost: 0 },
         coupon: { code: 'FREESHIPPING', discount: prev.shippingMethod.cost },
       }));
-      toast.success('Coupon applied: Free shipping!');
-    } else - setError('Invalid coupon code');
-    setFormData((prev) => ({
-      ...prev,
-      shippingMethod: { ...prev.shippingMethod, cost: subtotal >= 800 ? 0 : subtotal >= 500 ? 50 : 80 },
-      coupon: { code: prev.coupon.code, discount: 0 },
-    }));
+    } else {
+      let shippingCost = 80;
+      if (subtotal >= 800) {
+        shippingCost = 0;
+      } else if (subtotal >= 500) {
+        shippingCost = 50;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
+        coupon: { code: prev.coupon.code, discount: 0 },
+      }));
+      setError('Invalid coupon code');
+    }
     setCouponLoading(false);
   };
 
@@ -184,129 +173,6 @@ const CheckoutPage = () => {
     setStep(2);
   };
 
-  const markOrderAsFailed = async (orderId) => {
-    try {
-      await withRetry(() =>
-        axios.post(
-          `${BACKEND_URL}/api/orders/mark-failed`,
-          { orderId },
-          { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
-        )
-      );
-      console.log(`Marked order as failed: ${orderId}`);
-    } catch (error) {
-      console.error(`Failed to mark order ${orderId} as failed:`, error.message);
-    }
-  };
-
-  const downloadOrderPDF = (order) => {
-    try {
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.text(`Invoice: ${order.orderId || 'N/A'}`, 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Date: ${new Date(order.date).toLocaleDateString('en-IN')}`, 14, 28);
-
-      doc.setFontSize(12);
-      doc.text('Customer Information', 14, 40);
-      autoTable(doc, {
-        startY: 45,
-        head: [['Field', 'Details']],
-        body: [
-          ['Name', `${order.customer?.firstName || ''} ${order.customer?.lastName || ''}`],
-          ['Email', order.customer?.email || 'N/A'],
-          ['Phone', order.customer?.phone || 'N/A'],
-        ],
-        styles: { fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
-        headStyles: { fillColor: [26, 51, 41], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 130 } },
-      });
-
-      let shippingY = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(12);
-      doc.text('Shipping Details', 14, shippingY);
-      const shippingBody = [['Address Line 1', order.shippingAddress?.address1 || 'N/A']];
-      if (order.shippingAddress?.address2) {
-        shippingBody.push(['Address Line 2', order.shippingAddress.address2]);
-      }
-      shippingBody.push(
-        ['City/State', `${order.shippingAddress?.city || ''}, ${order.shippingAddress?.state || ''}`],
-        ['Pincode', order.shippingAddress?.pincode || 'N/A'],
-        ['Shipping Method', order.shippingMethod?.type || 'Standard']
-      );
-      autoTable(doc, {
-        startY: shippingY + 5,
-        head: [['Field', 'Details']],
-        body: shippingBody,
-        styles: { fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
-        headStyles: { fillColor: [26, 51, 41], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 130 } },
-      });
-
-      let itemsY = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(12);
-      doc.text('Items Purchased', 14, itemsY);
-      autoTable(doc, {
-        startY: itemsY + 5,
-        head: [['Item Name', 'Qty', 'Unit Price (₹)', 'Total (₹)']],
-        body: (order.items || []).map((item) => [
-          item.name || 'Unknown Item',
-          item.quantity || 0,
-          (item.price || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' }).replace('INR', '₹'),
-          ((item.price || 0) * (item.quantity || 0)).toLocaleString('en-IN', { style: 'currency', currency: 'INR' }).replace('INR', '₹'),
-        ]),
-        styles: { fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
-        headStyles: { fillColor: [26, 51, 41], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        columnStyles: {
-          0: { cellWidth: 80 },
-          1: { cellWidth: 20, halign: 'center' },
-          2: { cellWidth: 40, halign: 'right' },
-          3: { cellWidth: 40, halign: 'right' },
-        },
-      });
-
-      let totalY = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(12);
-      autoTable(doc, {
-        startY: totalY,
-        body: [
-          [
-            'Grand Total',
-            (order.total || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR' }).replace('INR', '₹'),
-          ],
-        ],
-        styles: { fontSize: 11, cellPadding: 3, fontStyle: 'bold', halign: 'right' },
-        columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 40 } },
-      });
-
-      let paymentY = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(12);
-      doc.text('Payment Information', 14, paymentY);
-      const paymentBody = [['Payment Method', order.paymentMethod || 'N/A']];
-      if (order.paymentMethod !== 'COD' && order.paymentId) {
-        paymentBody.push(['Payment ID', order.paymentId], ['Status', 'Paid']);
-      }
-      autoTable(doc, {
-        startY: paymentY + 5,
-        head: [['Field', 'Details']],
-        body: paymentBody,
-        styles: { fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
-        headStyles: { fillColor: [26, 51, 41], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 130 } },
-      });
-
-      doc.save(`Invoice_${order.orderId || 'unknown'}.pdf`);
-      toast.success('Invoice downloaded successfully!');
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      toast.error('Failed to generate invoice. Please try again.');
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -334,7 +200,9 @@ const CheckoutPage = () => {
 
       const orderResponse = await withRetry(() =>
         axios.post(`${BACKEND_URL}/api/orders`, orderData, {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           timeout: 10000,
         })
       );
@@ -349,7 +217,7 @@ const CheckoutPage = () => {
         try {
           const razorpayPayload = {
             orderId: orderResponse.data.order.orderId,
-            amount: Math.round(total * 100),
+            amount: Math.round(total * 100), // Amount in paise
             currency: 'INR',
             receipt: `receipt_${orderResponse.data.order.orderId}`,
             customer: {
@@ -362,10 +230,16 @@ const CheckoutPage = () => {
           console.log('Razorpay Payload:', JSON.stringify(razorpayPayload, null, 2));
 
           const razorpayResponse = await withRetry(() =>
-            axios.post(`${BACKEND_URL}/api/orders/initiate-razorpay-payment`, razorpayPayload, {
-              headers: { 'Content-Type': 'application/json' },
-              timeout: 15000,
-            })
+            axios.post(
+              `${BACKEND_URL}/api/orders/initiate-razorpay-payment`,
+              razorpayPayload,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                timeout: 15000,
+              }
+            )
           );
 
           const { razorpayOrderId, keyId } = razorpayResponse.data;
@@ -374,6 +248,7 @@ const CheckoutPage = () => {
             throw new Error('Invalid Razorpay response: Missing orderId or keyId');
           }
 
+          // Store pending transaction
           localStorage.setItem(
             'pendingTransaction',
             JSON.stringify({
@@ -383,6 +258,7 @@ const CheckoutPage = () => {
             })
           );
 
+          // Initialize Razorpay checkout
           const options = {
             key: keyId,
             amount: total * 100,
@@ -390,36 +266,26 @@ const CheckoutPage = () => {
             name: 'NISARGMAITRI',
             description: `Order #${orderResponse.data.order.orderId}`,
             order_id: razorpayOrderId,
-            handler: async function (response) {
-              try {
-                console.log('Razorpay payment response:', response);
-                localStorage.setItem(
-                  'paymentCallbackData',
-                  JSON.stringify({
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_signature: response.razorpay_signature,
-                    orderId: orderResponse.data.order.orderId,
-                  })
-                );
-                window.location.href = `${FRONTEND_URL}/payment-callback`;
-              } catch (error) {
-                console.error('Razorpay handler error:', error);
-                await markOrderAsFailed(orderResponse.data.order.orderId);
-                setError('Payment processing failed. Please try again.');
-                setStep(2);
-                setLoading(false);
-              }
+            handler: function (response) {
+              // Handle successful payment
+              navigate('/payment-callback', {
+                state: {
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                },
+              });
             },
             prefill: {
               name: `${formData.customer.firstName} ${formData.customer.lastName}`,
               email: formData.customer.email,
               contact: formData.customer.phone,
             },
-            theme: { color: '#1A3329' },
+            theme: {
+              color: '#1A3329',
+            },
             modal: {
-              ondismiss: async function () {
-                await markOrderAsFailed(orderResponse.data.order.orderId);
+              ondismiss: function () {
                 setError('Payment was cancelled. Please try again.');
                 setStep(2);
                 setLoading(false);
@@ -428,17 +294,9 @@ const CheckoutPage = () => {
           };
 
           const rzp = new window.Razorpay(options);
-          rzp.on('payment.failed', async function (response) {
-            console.error('Razorpay payment failed:', response.error);
-            await markOrderAsFailed(orderResponse.data.order.orderId);
-            setError(`Payment failed: ${response.error.description || 'Unknown error'}. Please try again.`);
-            setStep(2);
-            setLoading(false);
-          });
           rzp.open();
         } catch (paymentError) {
           console.error('Razorpay payment initiation failed:', paymentError.response?.data || paymentError.message);
-          await markOrderAsFailed(orderResponse.data.order.orderId);
           setError(
             paymentError.response?.data?.message ||
               'Failed to initiate Razorpay payment. Please try again or select Cash on Delivery.'
@@ -484,41 +342,12 @@ const CheckoutPage = () => {
   const total = subtotal + shippingCost;
 
   const indianStates = [
-    'Andaman and Nicobar Islands',
-    'Arunachal Pradesh',
-    'Assam',
-    'Bihar',
-    'Chandigarh',
-    'Chhattisgarh',
-    'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi',
-    'Goa',
-    'Gujarat',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jammu and Kashmir',
-    'Jharkhand',
-    'Karnataka',
-    'Kerala',
-    'Ladakh',
-    'Lakshadweep',
-    'Madhya Pradesh',
-    'Maharashtra',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Odisha',
-    'Puducherry',
-    'Punjab',
-    'Rajasthan',
-    'Sikkim',
-    'Tamil Nadu',
-    'Telangana',
-    'Tripura',
-    'Uttar Pradesh',
-    'Uttarakhand',
-    'West Bengal',
+    'Andaman and Nicobar Islands', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
+    'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat',
+    'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka', 'Kerala',
+    'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+    'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim',
+    'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
   ].sort();
 
   const filteredStates = indianStates.filter((state) =>
@@ -528,36 +357,26 @@ const CheckoutPage = () => {
   const PaymentCallback = () => {
     useEffect(() => {
       const verifyPayment = async () => {
-        const callbackData = JSON.parse(localStorage.getItem('paymentCallbackData'));
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = location.state || {};
         const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
 
         if (
-          !callbackData ||
-          !callbackData.razorpay_payment_id ||
-          !callbackData.razorpay_order_id ||
-          !callbackData.razorpay_signature ||
-          !callbackData.orderId ||
           !pendingTransaction ||
-          pendingTransaction.razorpayOrderId !== callbackData.razorpay_order_id ||
-          pendingTransaction.orderId !== callbackData.orderId
+          !razorpay_payment_id ||
+          !razorpay_order_id ||
+          !razorpay_signature ||
+          pendingTransaction.razorpayOrderId !== razorpay_order_id
         ) {
-          await markOrderAsFailed(callbackData?.orderId || pendingTransaction?.orderId);
           setError('Invalid or missing transaction data. Please try again.');
-          localStorage.removeItem('paymentCallbackData');
-          localStorage.removeItem('pendingTransaction');
-          setStep(2);
-          navigate('/checkout', { state: { step: 2, cartItems } });
+          navigate('/checkout', { state: { step: 2 } });
           return;
         }
 
         const transactionAge = Date.now() - pendingTransaction.timestamp;
         if (transactionAge > 15 * 60 * 1000) {
-          await markOrderAsFailed(callbackData.orderId);
           setError('Transaction expired. Please initiate a new payment.');
-          localStorage.removeItem('paymentCallbackData');
           localStorage.removeItem('pendingTransaction');
-          setStep(2);
-          navigate('/checkout', { state: { step: 2, cartItems } });
+          navigate('/checkout', { state: { step: 2 } });
           return;
         }
 
@@ -567,13 +386,15 @@ const CheckoutPage = () => {
             axios.post(
               `${BACKEND_URL}/api/orders/verify-razorpay-payment`,
               {
-                orderId: callbackData.orderId,
-                razorpay_payment_id: callbackData.razorpay_payment_id,
-                razorpay_order_id: callbackData.razorpay_order_id,
-                razorpay_signature: callbackData.razorpay_signature,
+                orderId: pendingTransaction.orderId,
+                razorpay_payment_id,
+                razorpay_order_id,
+                razorpay_signature,
               },
               {
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                },
                 timeout: 10000,
               }
             )
@@ -581,32 +402,27 @@ const CheckoutPage = () => {
 
           if (response.data.success) {
             setOrder(response.data.order);
-            setStep(3);
-            localStorage.removeItem('paymentCallbackData');
             localStorage.removeItem('pendingTransaction');
             navigate('/checkout', {
-              state: { order: response.data.order, step: 3, cartItems: [] }, // Clear cartItems to prevent redirect
+              state: {
+                order: response.data.order,
+                step: 3,
+              },
             });
           } else {
-            await markOrderAsFailed(callbackData.orderId);
-            setError(response.data.error || 'Payment verification failed. Please contact support.');
-            localStorage.removeItem('paymentCallbackData');
-            localStorage.removeItem('pendingTransaction');
-            setStep(2);
-            navigate('/checkout', { state: { step: 2, cartItems } });
+            setError(
+              response.data.error || 'Payment verification failed. Please contact support.'
+            );
+            navigate('/checkout', { state: { step: 2 } });
           }
         } catch (error) {
           console.error('Payment verification error:', error.response?.data || error.message);
-          await markOrderAsFailed(callbackData.orderId);
           setError(
             error.response?.data?.error ||
               error.response?.data?.details ||
               'Payment verification error. Please try again or contact support.'
           );
-          localStorage.removeItem('paymentCallbackData');
-          localStorage.removeItem('pendingTransaction');
-          setStep(2);
-          navigate('/checkout', { state: { step: 2, cartItems } });
+          navigate('/checkout', { state: { step: 2 } });
         } finally {
           setLoading(false);
         }
@@ -648,10 +464,6 @@ const CheckoutPage = () => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    script.onerror = () => {
-      setError('Failed to load Razorpay SDK. Please try again or select Cash on Delivery.');
-      setStep(2);
-    };
     document.body.appendChild(script);
     return () => {
       document.body.removeChild(script);
@@ -826,7 +638,7 @@ const CheckoutPage = () => {
 
                   <div>
                     <label htmlFor="address1" className="block text-gray-700 text-sm font-medium mb-2">
-                      Address Line 1*
+                      Address 1*
                     </label>
                     <input
                       id="address1"
@@ -842,7 +654,7 @@ const CheckoutPage = () => {
 
                   <div>
                     <label htmlFor="address2" className="block text-gray-700 text-sm font-medium mb-2">
-                      Address Line 2
+                      Address 2
                     </label>
                     <input
                       id="address2"
@@ -892,7 +704,9 @@ const CheckoutPage = () => {
                               </li>
                             ))
                           ) : (
-                            <li className="px-4 py-2 text-sm text-gray-500">No matching states</li>
+                            <li className="px-4 py-2 text-sm text-gray-500">
+                              No matching states
+                            </li>
                           )}
                         </ul>
                       )}
@@ -936,7 +750,9 @@ const CheckoutPage = () => {
                   </div>
 
                   <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">GST Details (Optional)</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                      GST Details (Optional)
+                    </h3>
                     <div>
                       <label htmlFor="gstNumber" className="block text-gray-700 text-sm font-medium mb-2">
                         GST Number
@@ -1016,9 +832,7 @@ const CheckoutPage = () => {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <fieldset className="space-y-4">
                     <legend className="sr-only">Payment Method</legend>
-                    <label
-                      className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
+                    <label className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
                         name="paymentMethod"
@@ -1036,9 +850,7 @@ const CheckoutPage = () => {
                       </div>
                     </label>
 
-                    <label
-                      className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
+                    <label className="flex items-center p-4 border rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
                       <input
                         type="radio"
                         name="paymentMethod"
@@ -1068,19 +880,8 @@ const CheckoutPage = () => {
                       {loading ? (
                         <span className="flex items-center justify-center">
                           <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                           </svg>
                           Processing...
                         </span>
@@ -1223,25 +1024,6 @@ const CheckoutPage = () => {
                     Payment ID: <span className="font-bold">{order.paymentId}</span>
                   </p>
                 )}
-                <button
-                  onClick={() => downloadOrderPDF(order)}
-                  className="mt-4 bg-[#1A3329] text-white px-6 py-2 rounded-md hover:bg-[#2F6844] transition-colors duration-300 flex items-center mx-auto"
-                >
-                  <svg
-                    className="h-5 w-5 mr-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"
-                    />
-                  </svg>
-                  Download Invoice
-                </button>
               </div>
 
               <div className="border-t border-b border-gray-200 py-6 mb-6">
@@ -1268,9 +1050,7 @@ const CheckoutPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Information</h3>
-                  <p className="text-gray-800">
-                    {order.customer.firstName} {order.customer.lastName}
-                  </p>
+                  <p className="text-gray-800">{order.customer.firstName} {order.customer.lastName}</p>
                   <p className="text-gray-600">{order.customer.email}</p>
                   <p className="text-gray-600">{order.customer.phone}</p>
                 </div>
@@ -1282,8 +1062,7 @@ const CheckoutPage = () => {
                     <p className="text-gray-800">{order.shippingAddress.address2}</p>
                   )}
                   <p className="text-gray-600">
-                    {order.shippingAddress.city}, {order.shippingAddress.state} -{' '}
-                    {order.shippingAddress.pincode}
+                    {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}
                   </p>
                   <p className="text-gray-600">Shipping Method: {order.shippingMethod.type}</p>
                 </div>
@@ -1291,10 +1070,7 @@ const CheckoutPage = () => {
 
               <div className="text-center">
                 <button
-                  onClick={() => {
-                    localStorage.removeItem('checkoutState');
-                    navigate('/');
-                  }}
+                  onClick={() => navigate('/')}
                   className="bg-[#1A3329] text-white px-8 py-3 rounded-md hover:bg-[#2F6844] transition-colors duration-300 font-medium"
                 >
                   Continue Shopping
