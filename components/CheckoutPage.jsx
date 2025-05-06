@@ -22,10 +22,10 @@ const withRetry = async (fn, retries = 3, delay = 1000) => {
 const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { cartItems } = location.state || { cartItems: [] };
+  const { cartItems, step: initialStep, order: initialOrder } = location.state || { cartItems: [], step: 1, order: null };
 
-  const [step, setStep] = useState(location.state?.step || 1);
-  const [order, setOrder] = useState(location.state?.order || null);
+  const [step, setStep] = useState(initialStep || 1);
+  const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(false);
   const [couponLoading, setCouponLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -86,10 +86,15 @@ const CheckoutPage = () => {
   }, [subtotal, formData.coupon.code]);
 
   useEffect(() => {
+    console.log('CheckoutPage state:', { step, order, cartItems: cartItems.length, locationState: location.state });
+    // Only redirect to /shop if cartItems is empty and not in step 3
     if (!cartItems || cartItems.length === 0) {
-      navigate('/shop');
+      if (step !== 3 || !order) {
+        console.warn('Redirecting to /shop: Empty cartItems and not in confirmation step');
+        navigate('/shop');
+      }
     }
-  }, [cartItems, navigate]);
+  }, [cartItems, navigate, step, order]);
 
   useEffect(() => {
     if (error) {
@@ -267,12 +272,14 @@ const CheckoutPage = () => {
             description: `Order #${orderResponse.data.order.orderId}`,
             order_id: razorpayOrderId,
             handler: function (response) {
+              console.log('Razorpay payment success:', response);
               // Handle successful payment
               navigate('/payment-callback', {
                 state: {
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
+                  cartItems, // Pass cartItems to preserve state
                 },
               });
             },
@@ -286,6 +293,7 @@ const CheckoutPage = () => {
             },
             modal: {
               ondismiss: function () {
+                console.warn('Razorpay modal dismissed');
                 setError('Payment was cancelled. Please try again.');
                 setStep(2);
                 setLoading(false);
@@ -357,8 +365,10 @@ const CheckoutPage = () => {
   const PaymentCallback = () => {
     useEffect(() => {
       const verifyPayment = async () => {
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = location.state || {};
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cartItems } = location.state || {};
         const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
+
+        console.log('PaymentCallback state:', { locationState: location.state, pendingTransaction });
 
         if (
           !pendingTransaction ||
@@ -367,16 +377,18 @@ const CheckoutPage = () => {
           !razorpay_signature ||
           pendingTransaction.razorpayOrderId !== razorpay_order_id
         ) {
+          console.error('Invalid or missing transaction data');
           setError('Invalid or missing transaction data. Please try again.');
-          navigate('/checkout', { state: { step: 2 } });
+          navigate('/checkout', { state: { step: 2, cartItems } });
           return;
         }
 
         const transactionAge = Date.now() - pendingTransaction.timestamp;
         if (transactionAge > 15 * 60 * 1000) {
+          console.error('Transaction expired');
           setError('Transaction expired. Please initiate a new payment.');
           localStorage.removeItem('pendingTransaction');
-          navigate('/checkout', { state: { step: 2 } });
+          navigate('/checkout', { state: { step: 2, cartItems } });
           return;
         }
 
@@ -400,6 +412,8 @@ const CheckoutPage = () => {
             )
           );
 
+          console.log('Payment verification response:', response.data);
+
           if (response.data.success) {
             setOrder(response.data.order);
             localStorage.removeItem('pendingTransaction');
@@ -407,13 +421,15 @@ const CheckoutPage = () => {
               state: {
                 order: response.data.order,
                 step: 3,
+                cartItems, // Preserve cartItems
               },
             });
           } else {
+            console.error('Payment verification failed:', response.data.error);
             setError(
               response.data.error || 'Payment verification failed. Please contact support.'
             );
-            navigate('/checkout', { state: { step: 2 } });
+            navigate('/checkout', { state: { step: 2, cartItems } });
           }
         } catch (error) {
           console.error('Payment verification error:', error.response?.data || error.message);
@@ -422,7 +438,7 @@ const CheckoutPage = () => {
               error.response?.data?.details ||
               'Payment verification error. Please try again or contact support.'
           );
-          navigate('/checkout', { state: { step: 2 } });
+          navigate('/checkout', { state: { step: 2, cartItems } });
         } finally {
           setLoading(false);
         }
