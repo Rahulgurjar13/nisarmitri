@@ -10,6 +10,19 @@ import "react-toastify/dist/ReactToastify.css";
 
 const BACKEND_URL = "https://backendforshop.onrender.com";
 
+// Retry utility for API calls
+const withRetry = async (fn, retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      console.warn(`Retry ${i + 1}/${retries} failed:`, error.message);
+      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
+    }
+  }
+};
+
 const OrderRow = ({ order, onViewDetails }) => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-IN", {
@@ -68,12 +81,14 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [error, setError] = useState(null);
-  const [filterDate, setFilterDate] = useState("");
+  const [filterDate, setFilterDate] = useState(
+    new Date().toISOString().split("T")[0]
+  ); // Default to today
   const [searchOrderId, setSearchOrderId] = useState("");
   const [isFiltering, setIsFiltering] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const lastFilterParams = useRef({});
-  const prevFilterDate = useRef("");
+  const prevFilterDate = useRef(new Date().toISOString().split("T")[0]);
   const renderCount = useRef(0);
   const isFilterPending = useRef(false);
 
@@ -87,60 +102,77 @@ const AdminDashboard = () => {
   // Memoize orders to stabilize handleFilterOrders
   const memoizedOrders = useMemo(() => orders, [orders]);
 
+  const fetchOrders = useCallback(async () => {
+    if (!token) {
+      setError("Please log in to access the dashboard.");
+      stableNavigate("/login");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log("Fetching orders with token:", token);
+      const ordersResponse = await withRetry(() =>
+        axios.get(`${BACKEND_URL}/api/orders`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 10000,
+        })
+      );
+      setOrders(ordersResponse.data);
+      setFilteredOrders(
+        filterDate
+          ? ordersResponse.data.filter((order) =>
+              new Date(order.date)
+                .toISOString()
+                .startsWith(new Date(filterDate).toISOString().split("T")[0])
+            )
+          : ordersResponse.data
+      );
+      setError(null);
+      if (ordersResponse.data.length > orders.length) {
+        toast.success(`${ordersResponse.data.length - orders.length} new order(s) loaded.`);
+      }
+      console.log(`Fetched ${ordersResponse.data.length} orders`);
+    } catch (err) {
+      console.error(
+        "Fetch error:",
+        err.response?.status,
+        err.response?.data || err.message
+      );
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setError("Session expired or unauthorized. Please log in again.");
+        localStorage.removeItem("token");
+        localStorage.removeItem("isAdmin");
+        localStorage.removeItem("userName");
+        stableNavigate("/login");
+      } else {
+        setError("Failed to load orders. Please try again later.");
+        toast.error("Failed to load orders. Please try again later.");
+        setOrders([]);
+        setFilteredOrders([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, stableNavigate, filterDate, orders.length]);
+
   useEffect(() => {
     let mounted = true;
+    let intervalId;
 
     const fetchData = async () => {
-      if (!token) {
-        if (mounted) {
-          setError("Please log in to access the dashboard.");
-          stableNavigate("/login");
-        }
-        return;
-      }
-
-      setLoading(true);
-      try {
-        console.log("Fetching orders with token:", token);
-        const ordersResponse = await axios.get(`${BACKEND_URL}/api/orders`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (mounted) {
-          setOrders(ordersResponse.data);
-          setFilteredOrders(ordersResponse.data);
-          setError(null);
-        }
-      } catch (err) {
-        console.error(
-          "Fetch error:",
-          err.response?.status,
-          err.response?.data || err.message
-        );
-        if (mounted) {
-          if (err.response?.status === 401 || err.response?.status === 403) {
-            setError("Session expired or unauthorized. Please log in again.");
-            localStorage.removeItem("token");
-            localStorage.removeItem("isAdmin");
-            localStorage.removeItem("userName");
-            stableNavigate("/login");
-          } else {
-            setError("Failed to load data. Please try again later.");
-            toast.error("Failed to load data. Please try again later.");
-            setOrders([]);
-            setFilteredOrders([]);
-          }
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
+      if (!mounted) return;
+      await fetchOrders();
     };
 
     fetchData();
+    intervalId = setInterval(fetchData, 30000); // Poll every 30 seconds
 
     return () => {
       mounted = false;
+      clearInterval(intervalId);
     };
-  }, [token, stableNavigate]);
+  }, [fetchOrders]);
 
   const handleFilterOrders = useCallback(
     async (params) => {
@@ -162,26 +194,23 @@ const AdminDashboard = () => {
         return;
       }
 
-      // Skip if no date is provided
-      if (!params.date) {
-        setFilteredOrders(memoizedOrders);
-        lastFilterParams.current = {};
-        return;
-      }
-
       setIsFiltering(true);
       isFilterPending.current = true;
       try {
         console.log("Filtering orders with params:", JSON.stringify(params));
-        const response = await axios.get(`${BACKEND_URL}/api/orders`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await withRetry(() =>
+          axios.get(`${BACKEND_URL}/api/orders`, {
+            params,
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 10000,
+          })
+        );
         setFilteredOrders(response.data);
         lastFilterParams.current = params;
         if (response.data.length === 0) {
           toast.info("No orders found for the selected date.");
         }
+        console.log(`Filtered ${response.data.length} orders`);
       } catch (error) {
         console.error(
           "Filter orders error:",
@@ -195,7 +224,7 @@ const AdminDashboard = () => {
         isFilterPending.current = false;
       }
     },
-    [memoizedOrders, token, isFiltering, filteredOrders.length]
+    [token, isFiltering, filteredOrders.length]
   );
 
   const handleSearchOrders = useCallback(
@@ -215,14 +244,18 @@ const AdminDashboard = () => {
       try {
         const params = { orderId: orderId.trim() };
         console.log("Searching orders with params:", JSON.stringify(params));
-        const response = await axios.get(`${BACKEND_URL}/api/orders`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await withRetry(() =>
+          axios.get(`${BACKEND_URL}/api/orders`, {
+            params,
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 10000,
+          })
+        );
         setFilteredOrders(response.data);
         if (response.data.length === 0) {
           toast.info("No orders found for the provided Order ID.");
         }
+        console.log(`Searched ${response.data.length} orders`);
       } catch (error) {
         console.error(
           "Search orders error:",
@@ -257,11 +290,11 @@ const AdminDashboard = () => {
   );
 
   const clearFilters = () => {
-    setFilterDate("");
+    setFilterDate(new Date().toISOString().split("T")[0]); // Reset to today
     setSearchOrderId("");
     setFilteredOrders(memoizedOrders);
     lastFilterParams.current = {};
-    prevFilterDate.current = "";
+    prevFilterDate.current = new Date().toISOString().split("T")[0];
     isFilterPending.current = false;
     toast.success("Filters and search cleared.");
   };
@@ -284,10 +317,10 @@ const AdminDashboard = () => {
     // Update prevFilterDate
     prevFilterDate.current = filterDate;
 
-    // Only trigger if a date is set
-    if (filterDate) {
+    // Only trigger if a date is set and different from today
+    if (filterDate && filterDate !== new Date().toISOString().split("T")[0]) {
       debouncedHandleFilterOrders(params);
-    } else if (lastFilterParams.current.date) {
+    } else {
       setFilteredOrders(memoizedOrders);
       lastFilterParams.current = {};
     }
@@ -384,7 +417,7 @@ const AdminDashboard = () => {
         startY: itemsY + 5,
         head: [["Item Name", "Qty", "Unit Price (₹)", "Total (₹)"]],
         body: (order.items || []).map((item) => [
-          item.name || "Unknown Item", // Fixed typo
+          item.name || "Unknown Item",
           item.quantity || 0,
           (item.price || 0)
             .toLocaleString("en-IN", { style: "currency", currency: "INR" })
@@ -429,9 +462,9 @@ const AdminDashboard = () => {
       doc.setFontSize(12);
       doc.text("Payment Information", 14, paymentY);
       const paymentBody = [["Payment Method", order.paymentMethod || "N/A"]];
-      if (order.paymentMethod !== "COD" && order.razorpayPaymentId) {
+      if (order.paymentMethod !== "COD" && order.paymentId) {
         paymentBody.push(
-          ["Payment ID", order.razorpayPaymentId],
+          ["Payment ID", order.paymentId],
           ["Status", "Paid"],
         );
       }
@@ -715,9 +748,9 @@ const AdminDashboard = () => {
                     </h3>
                     <p>Payment Method: {selectedOrder.paymentMethod}</p>
                     {selectedOrder.paymentMethod !== "COD" &&
-                      selectedOrder.razorpayPaymentId && (
+                      selectedOrder.paymentId && (
                         <>
-                          <p>Payment ID: {selectedOrder.razorpayPaymentId}</p>
+                          <p>Payment ID: {selectedOrder.paymentId}</p>
                           <p>Status: Paid</p>
                         </>
                       )}
