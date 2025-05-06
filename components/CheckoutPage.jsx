@@ -80,14 +80,13 @@ const CheckoutPage = () => {
       shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
       coupon: {
         ...prev.coupon,
-        discount: formData.coupon.code.toUpperCase() === 'FREESHIPPING' ? prev.shippingMethod.cost : 0,
+        discount: formData.coupon.code.toUpperCase() === 'FREESHIPPING' ? 80 : 0, // Fixed discount to original shipping cost
       },
     }));
   }, [subtotal, formData.coupon.code]);
 
   useEffect(() => {
     console.log('CheckoutPage state:', { step, order, cartItems: cartItems.length, locationState: location.state });
-    // Only redirect to /shop if cartItems is empty and not in step 3
     if (!cartItems || cartItems.length === 0) {
       if (step !== 3 || !order) {
         console.warn('Redirecting to /shop: Empty cartItems and not in confirmation step');
@@ -125,7 +124,7 @@ const CheckoutPage = () => {
       setFormData((prev) => ({
         ...prev,
         shippingMethod: { ...prev.shippingMethod, cost: 0 },
-        coupon: { code: 'FREESHIPPING', discount: prev.shippingMethod.cost },
+        coupon: { code: 'FREESHIPPING', discount: 80 }, // Fixed discount
       }));
     } else {
       let shippingCost = 80;
@@ -183,6 +182,12 @@ const CheckoutPage = () => {
     setLoading(true);
     setError(null);
 
+    if (!cartItems.length) {
+      setError('Your cart is empty');
+      setLoading(false);
+      return;
+    }
+
     try {
       const items = cartItems.map((item) => ({
         productId: item.id,
@@ -193,7 +198,8 @@ const CheckoutPage = () => {
       }));
 
       const shippingCost = formData.shippingMethod.cost;
-      const total = subtotal + shippingCost;
+      const couponDiscount = formData.coupon.discount || 0;
+      const total = subtotal + shippingCost - couponDiscount; // Include coupon discount
 
       const orderData = {
         ...formData,
@@ -203,6 +209,8 @@ const CheckoutPage = () => {
         paymentStatus: 'Pending',
       };
 
+      console.log('Order submission data:', JSON.stringify({ items, shippingCost, couponDiscount, total }, null, 2));
+
       const orderResponse = await withRetry(() =>
         axios.post(`${BACKEND_URL}/api/orders`, orderData, {
           headers: {
@@ -211,6 +219,8 @@ const CheckoutPage = () => {
           timeout: 10000,
         })
       );
+
+      console.log('Order creation response:', orderResponse.data);
 
       if (!orderResponse.data.order?.orderId) {
         throw new Error('Order creation failed: Missing orderId');
@@ -273,13 +283,13 @@ const CheckoutPage = () => {
             order_id: razorpayOrderId,
             handler: function (response) {
               console.log('Razorpay payment success:', response);
-              // Handle successful payment
               navigate('/payment-callback', {
                 state: {
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
-                  cartItems, // Pass cartItems to preserve state
+                  cartItems,
+                  step: 2, // Preserve state for error cases
                 },
               });
             },
@@ -306,7 +316,7 @@ const CheckoutPage = () => {
         } catch (paymentError) {
           console.error('Razorpay payment initiation failed:', paymentError.response?.data || paymentError.message);
           setError(
-            paymentError.response?.data?.message ||
+            paymentError.response?.data?.error ||
               'Failed to initiate Razorpay payment. Please try again or select Cash on Delivery.'
           );
           setStep(2);
@@ -315,10 +325,14 @@ const CheckoutPage = () => {
         setStep(3);
       }
     } catch (error) {
-      console.error('Order processing failed:', error.response?.data || error.message);
+      console.error('Order processing failed:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
       setError(
-        error.response?.data?.error ||
-          error.response?.data?.details ||
+        error.response?.data?.details ||
+          error.response?.data?.error ||
           'Something went wrong while processing your order. Please try again.'
       );
     } finally {
@@ -347,7 +361,7 @@ const CheckoutPage = () => {
   };
 
   const shippingCost = formData.shippingMethod.cost;
-  const total = subtotal + shippingCost;
+  const total = subtotal + shippingCost - (formData.coupon.discount || 0); // Update total display
 
   const indianStates = [
     'Andaman and Nicobar Islands', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
@@ -365,7 +379,7 @@ const CheckoutPage = () => {
   const PaymentCallback = () => {
     useEffect(() => {
       const verifyPayment = async () => {
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cartItems } = location.state || {};
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cartItems, step } = location.state || {};
         const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
 
         console.log('PaymentCallback state:', { locationState: location.state, pendingTransaction });
@@ -379,7 +393,7 @@ const CheckoutPage = () => {
         ) {
           console.error('Invalid or missing transaction data');
           setError('Invalid or missing transaction data. Please try again.');
-          navigate('/checkout', { state: { step: 2, cartItems } });
+          navigate('/checkout', { state: { step: step || 2, cartItems } });
           return;
         }
 
@@ -388,7 +402,7 @@ const CheckoutPage = () => {
           console.error('Transaction expired');
           setError('Transaction expired. Please initiate a new payment.');
           localStorage.removeItem('pendingTransaction');
-          navigate('/checkout', { state: { step: 2, cartItems } });
+          navigate('/checkout', { state: { step: step || 2, cartItems } });
           return;
         }
 
@@ -421,7 +435,7 @@ const CheckoutPage = () => {
               state: {
                 order: response.data.order,
                 step: 3,
-                cartItems, // Preserve cartItems
+                cartItems,
               },
             });
           } else {
@@ -429,16 +443,16 @@ const CheckoutPage = () => {
             setError(
               response.data.error || 'Payment verification failed. Please contact support.'
             );
-            navigate('/checkout', { state: { step: 2, cartItems } });
+            navigate('/checkout', { state: { step: step || 2, cartItems } });
           }
         } catch (error) {
           console.error('Payment verification error:', error.response?.data || error.message);
           setError(
-            error.response?.data?.error ||
-              error.response?.data?.details ||
+            error.response?.data?.details ||
+              error.response?.data?.error ||
               'Payment verification error. Please try again or contact support.'
           );
-          navigate('/checkout', { state: { step: 2, cartItems } });
+          navigate('/checkout', { state: { step: step || 2, cartItems } });
         } finally {
           setLoading(false);
         }
@@ -830,6 +844,12 @@ const CheckoutPage = () => {
                     <span className="text-gray-600">Shipping</span>
                     <span>₹{shippingCost.toLocaleString('en-IN')}</span>
                   </div>
+                  {formData.coupon.discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Coupon Discount</span>
+                      <span>-₹{formData.coupon.discount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-200">
                     <span>Total</span>
                     <span>₹{total.toLocaleString('en-IN')}</span>
@@ -1001,6 +1021,12 @@ const CheckoutPage = () => {
                     <span className="text-gray-600">Shipping</span>
                     <span>₹{shippingCost.toLocaleString('en-IN')}</span>
                   </div>
+                  {formData.coupon.discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Coupon Discount</span>
+                      <span>-₹{formData.coupon.discount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-200">
                     <span>Total</span>
                     <span>₹{total.toLocaleString('en-IN')}</span>
