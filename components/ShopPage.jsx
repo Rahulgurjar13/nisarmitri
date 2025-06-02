@@ -230,7 +230,7 @@ const ShopPage = () => {
         id: 1,
         name: 'Bamboo Toothbrush',
         description: 'Eco-friendly bamboo toothbrush with soft bristles, perfect for everyday use.',
-        price: 40,
+        price: 1,
         image: '/toothbrush.png',
         category: 'Bamboo',
         tag: 'Bestseller'
