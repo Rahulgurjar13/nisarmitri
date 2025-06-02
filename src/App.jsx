@@ -18,7 +18,7 @@ import PrivacyPolicy from "../components/PrivacyPolicy.jsx";
 import TermsAndConditions from "../components/TermsAndConditions.jsx";
 import ServicesPage from "../components/ServicesPage.jsx";
 import WasteManagementPage from "../components/WasteManagementPage.jsx";
-import Right from "../components/PhonePePaymentButton.jsx";
+
 
 // ProtectedRoute component to restrict access to admin-only routes
 const ProtectedRoute = ({ children }) => {
