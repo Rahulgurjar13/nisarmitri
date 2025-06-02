@@ -4,7 +4,6 @@ import axios from 'axios';
 import Footer from './Footer';
 
 const BACKEND_URL = 'https://backendforshop.onrender.com';
-const FRONTEND_URL = 'https://www.nisargmaitri.in';
 
 // Retry utility for API calls
 const withRetry = async (fn, retries = 3, delay = 1000) => {
@@ -51,10 +50,7 @@ const CheckoutPage = () => {
   const [stateSearch, setStateSearch] = useState('');
   const [showStateSuggestions, setShowStateSuggestions] = useState(false);
 
-  const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
@@ -87,7 +83,6 @@ const CheckoutPage = () => {
 
   useEffect(() => {
     console.log('CheckoutPage state:', { step, order, cartItems: cartItems.length, locationState: location.state });
-    // Only redirect to /shop if cartItems is empty and not in step 3
     if (!cartItems || cartItems.length === 0) {
       if (step !== 3 || !order) {
         console.warn('Redirecting to /shop: Empty cartItems and not in confirmation step');
@@ -200,86 +195,78 @@ const CheckoutPage = () => {
         items,
         date: new Date().toISOString(),
         total,
-        paymentStatus: 'Pending',
       };
 
       const orderResponse = await withRetry(() =>
         axios.post(`${BACKEND_URL}/api/orders`, orderData, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         })
       );
 
-      if (!orderResponse.data.order?.orderId) {
-        throw new Error('Order creation failed: Missing orderId');
-      }
-
-      setOrder(orderResponse.data.order);
-
       if (formData.paymentMethod === 'Razorpay') {
+        if (!orderResponse.data.orderData?.orderId) {
+          throw new Error('Order initiation failed: Missing orderId');
+        }
+
         try {
           const razorpayPayload = {
-            orderId: orderResponse.data.order.orderId,
+            orderId: orderResponse.data.orderData.orderId,
             amount: Math.round(total * 100), // Amount in paise
             currency: 'INR',
-            receipt: `receipt_${orderResponse.data.order.orderId}`,
+            receipt: `receipt_${orderResponse.data.orderData.orderId}`,
             customer: {
               name: `${formData.customer.firstName} ${formData.customer.lastName}`,
               email: formData.customer.email,
               contact: formData.customer.phone,
             },
+            orderData: orderResponse.data.orderData,
           };
 
           console.log('Razorpay Payload:', JSON.stringify(razorpayPayload, null, 2));
 
           const razorpayResponse = await withRetry(() =>
-            axios.post(
-              `${BACKEND_URL}/api/orders/initiate-razorpay-payment`,
-              razorpayPayload,
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                timeout: 15000,
-              }
-            )
+            axios.post(`${BACKEND_URL}/api/orders/initiate-razorpay-payment`, razorpayPayload, {
+              headers: { 'Content-Type': 'application/json' },
+              timeout: 15000,
+            })
           );
 
-          const { razorpayOrderId, keyId } = razorpayResponse.data;
+          const { razorpayOrderId, keyId, orderData } = razorpayResponse.data;
 
           if (!razorpayOrderId || !keyId) {
             throw new Error('Invalid Razorpay response: Missing orderId or keyId');
           }
 
-          // Store pending transaction
           localStorage.setItem(
             'pendingTransaction',
             JSON.stringify({
-              orderId: orderResponse.data.order.orderId,
+              orderId: orderResponse.data.orderData.orderId,
               razorpayOrderId,
               timestamp: Date.now(),
             })
           );
 
-          // Initialize Razorpay checkout
+          if (!window.Razorpay) {
+            throw new Error('Razorpay SDK not loaded');
+          }
+
           const options = {
             key: keyId,
             amount: total * 100,
             currency: 'INR',
             name: 'NISARGMAITRI',
-            description: `Order #${orderResponse.data.order.orderId}`,
+            description: `Order #${orderResponse.data.orderData.orderId}`,
             order_id: razorpayOrderId,
             handler: function (response) {
               console.log('Razorpay payment success:', response);
-              // Handle successful payment
               navigate('/payment-callback', {
                 state: {
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
-                  cartItems, // Pass cartItems to preserve state
+                  cartItems,
+                  orderData,
                 },
               });
             },
@@ -288,9 +275,7 @@ const CheckoutPage = () => {
               email: formData.customer.email,
               contact: formData.customer.phone,
             },
-            theme: {
-              color: '#1A3329',
-            },
+            theme: { color: '#1A3329' },
             modal: {
               ondismiss: function () {
                 console.warn('Razorpay modal dismissed');
@@ -307,11 +292,17 @@ const CheckoutPage = () => {
           console.error('Razorpay payment initiation failed:', paymentError.response?.data || paymentError.message);
           setError(
             paymentError.response?.data?.message ||
-              'Failed to initiate Razorpay payment. Please try again or select Cash on Delivery.'
+              (paymentError.message === 'Razorpay SDK not loaded'
+                ? 'Payment system failed to load. Please try again or select Cash on Delivery.'
+                : 'Failed to initiate Razorpay payment. Please try again or select Cash on Delivery.')
           );
           setStep(2);
         }
       } else if (formData.paymentMethod === 'COD') {
+        if (!orderResponse.data.order?.orderId) {
+          throw new Error('Order creation failed: Missing orderId');
+        }
+        setOrder(orderResponse.data.order);
         setStep(3);
       }
     } catch (error) {
@@ -365,7 +356,7 @@ const CheckoutPage = () => {
   const PaymentCallback = () => {
     useEffect(() => {
       const verifyPayment = async () => {
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cartItems } = location.state || {};
+        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cartItems, orderData } = location.state || {};
         const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
 
         console.log('PaymentCallback state:', { locationState: location.state, pendingTransaction });
@@ -375,10 +366,11 @@ const CheckoutPage = () => {
           !razorpay_payment_id ||
           !razorpay_order_id ||
           !razorpay_signature ||
+          !orderData ||
           pendingTransaction.razorpayOrderId !== razorpay_order_id
         ) {
           console.error('Invalid or missing transaction data');
-          setError('Invalid or missing transaction data. Please try again.');
+          setError('Invalid or missing payment data. Please try again.');
           navigate('/checkout', { state: { step: 2, cartItems } });
           return;
         }
@@ -402,11 +394,10 @@ const CheckoutPage = () => {
                 razorpay_payment_id,
                 razorpay_order_id,
                 razorpay_signature,
+                orderData,
               },
               {
-                headers: {
-                  'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 timeout: 10000,
               }
             )
@@ -418,17 +409,11 @@ const CheckoutPage = () => {
             setOrder(response.data.order);
             localStorage.removeItem('pendingTransaction');
             navigate('/checkout', {
-              state: {
-                order: response.data.order,
-                step: 3,
-                cartItems, // Preserve cartItems
-              },
+              state: { order: response.data.order, step: 3, cartItems },
             });
           } else {
             console.error('Payment verification failed:', response.data.error);
-            setError(
-              response.data.error || 'Payment verification failed. Please contact support.'
-            );
+            setError(response.data.error || 'Payment verification failed. Please contact support.');
             navigate('/checkout', { state: { step: 2, cartItems } });
           }
         } catch (error) {
@@ -471,6 +456,7 @@ const CheckoutPage = () => {
             />
           </svg>
         )}
+        {error && <p className="text-red-500 mt-4">{error}</p>}
       </div>
     );
   };
@@ -480,6 +466,8 @@ const CheckoutPage = () => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
+    script.onload = () => console.log('Razorpay SDK loaded');
+    script.onerror = () => console.error('Failed to load Razorpay SDK');
     document.body.appendChild(script);
     return () => {
       document.body.removeChild(script);
@@ -720,9 +708,7 @@ const CheckoutPage = () => {
                               </li>
                             ))
                           ) : (
-                            <li className="px-4 py-2 text-sm text-gray-500">
-                              No matching states
-                            </li>
+                            <li className="px-4 py-2 text-sm text-gray-500">No matching states</li>
                           )}
                         </ul>
                       )}
@@ -759,16 +745,12 @@ const CheckoutPage = () => {
                         aria-required="true"
                         aria-describedby="pincode-desc"
                       />
-                      <p id="pincode-desc" className="text-xs text-gray-500 mt-1">
-                        Enter a 6-digit pincode
-                      </p>
+                      <p id="pincode-desc" className="text-xs text-gray-500 mt-1">Enter a 6-digit pincode</p>
                     </div>
                   </div>
 
                   <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                      GST Details (Optional)
-                    </h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">GST Details (Optional)</h3>
                     <div>
                       <label htmlFor="gstNumber" className="block text-gray-700 text-sm font-medium mb-2">
                         GST Number
@@ -815,9 +797,7 @@ const CheckoutPage = () => {
                         <span className="text-sm text-gray-800 font-medium">{item.name}</span>
                         <span className="text-xs text-gray-500 ml-1">x{item.quantity}</span>
                       </div>
-                      <span className="text-sm font-medium">
-                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                      </span>
+                      <span className="text-sm font-medium">₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
                     </div>
                   ))}
                 </div>
@@ -878,9 +858,7 @@ const CheckoutPage = () => {
                       />
                       <div className="ml-3">
                         <span className="block font-medium text-gray-900">Cash on Delivery</span>
-                        <span className="block text-sm text-gray-500">
-                          Pay when you receive your order
-                        </span>
+                        <span className="block text-sm text-gray-500">Pay when you receive your order</span>
                       </div>
                     </label>
                   </fieldset>
@@ -896,8 +874,19 @@ const CheckoutPage = () => {
                       {loading ? (
                         <span className="flex items-center justify-center">
                           <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
                           </svg>
                           Processing...
                         </span>
@@ -936,9 +925,7 @@ const CheckoutPage = () => {
                         <span className="text-sm text-gray-800 font-medium">{item.name}</span>
                         <span className="text-xs text-gray-500 ml-1">x{item.quantity}</span>
                       </div>
-                      <span className="text-sm font-medium">
-                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                      </span>
+                      <span className="text-sm font-medium">₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
                     </div>
                   ))}
                 </div>
@@ -950,11 +937,7 @@ const CheckoutPage = () => {
                       type="text"
                       placeholder="Enter coupon code"
                       value={formData.coupon.code}
-                      onChange={(e) =>
-                        handleChange({
-                          target: { name: 'coupon.code', value: e.target.value },
-                        })
-                      }
+                      onChange={(e) => handleChange({ target: { name: 'coupon.code', value: e.target.value } })}
                       className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1A3329] focus:border-transparent"
                       aria-label="Coupon code"
                       disabled={couponLoading}
@@ -962,7 +945,7 @@ const CheckoutPage = () => {
                     <button
                       type="button"
                       onClick={applyCoupon}
-                      className={`bg-[#1A3329] text-white px-3 py-2 rounded-md hover:bg-[#2F6844] transition-colors duration-300 text-sm ${
+                      className={`bg-[#1A3329] text-white px-3 py-2 rounded-md hover:bg-[#2F6844] transition-colors duration-300 text-sm font-medium ${
                         couponLoading ? 'opacity-50 cursor-not-allowed' : ''
                       }`}
                       disabled={couponLoading}
@@ -980,12 +963,7 @@ const CheckoutPage = () => {
                         stroke="currentColor"
                         aria-hidden="true"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                       Free shipping applied! (Discount: ₹{formData.coupon.discount})
                     </p>
@@ -1022,12 +1000,7 @@ const CheckoutPage = () => {
                     stroke="currentColor"
                     aria-hidden="true"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900">Thank You for Your Order!</h2>
@@ -1051,9 +1024,7 @@ const CheckoutPage = () => {
                         <span className="font-medium">{item.name}</span>
                         <span className="text-sm text-gray-500">Quantity: {item.quantity}</span>
                       </div>
-                      <span className="font-medium">
-                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                      </span>
+                      <span className="font-medium">₹{(item.price * item.quantity).toLocaleString('en-IN')}</span>
                     </div>
                   ))}
                 </div>
@@ -1066,7 +1037,9 @@ const CheckoutPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Information</h3>
-                  <p className="text-gray-800">{order.customer.firstName} {order.customer.lastName}</p>
+                  <p className="text-gray-800">
+                    {order.customer.firstName} {order.customer.lastName}
+                  </p>
                   <p className="text-gray-600">{order.customer.email}</p>
                   <p className="text-gray-600">{order.customer.phone}</p>
                 </div>
@@ -1074,9 +1047,7 @@ const CheckoutPage = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Shipping Details</h3>
                   <p className="text-gray-800">{order.shippingAddress.address1}</p>
-                  {order.shippingAddress.address2 && (
-                    <p className="text-gray-800">{order.shippingAddress.address2}</p>
-                  )}
+                  {order.shippingAddress.address2 && <p className="text-gray-800">{order.shippingAddress.address2}</p>}
                   <p className="text-gray-600">
                     {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}
                   </p>

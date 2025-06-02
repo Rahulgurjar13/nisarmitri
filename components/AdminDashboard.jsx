@@ -118,21 +118,25 @@ const AdminDashboard = () => {
           timeout: 10000,
         })
       );
-      setOrders(ordersResponse.data);
+      // Filter orders to only include those with paymentStatus: "Paid"
+      const paidOrders = ordersResponse.data.filter(
+        (order) => order.paymentStatus === "Paid"
+      );
+      setOrders(paidOrders);
       setFilteredOrders(
         filterDate
-          ? ordersResponse.data.filter((order) =>
+          ? paidOrders.filter((order) =>
               new Date(order.date)
                 .toISOString()
                 .startsWith(new Date(filterDate).toISOString().split("T")[0])
             )
-          : ordersResponse.data
+          : paidOrders
       );
       setError(null);
-      if (ordersResponse.data.length > orders.length) {
-        toast.success(`${ordersResponse.data.length - orders.length} new order(s) loaded.`);
+      if (paidOrders.length > orders.length) {
+        toast.success(`${paidOrders.length - orders.length} new order(s) loaded.`);
       }
-      console.log(`Fetched ${ordersResponse.data.length} orders`);
+      console.log(`Fetched ${paidOrders.length} paid orders`);
     } catch (err) {
       console.error(
         "Fetch error:",
@@ -205,12 +209,16 @@ const AdminDashboard = () => {
             timeout: 10000,
           })
         );
-        setFilteredOrders(response.data);
+        // Filter orders to only include those with paymentStatus: "Paid"
+        const paidOrders = response.data.filter(
+          (order) => order.paymentStatus === "Paid"
+        );
+        setFilteredOrders(paidOrders);
         lastFilterParams.current = params;
-        if (response.data.length === 0) {
-          toast.info("No orders found for the selected date.");
+        if (paidOrders.length === 0) {
+          toast.info("No successful orders found for the selected date.");
         }
-        console.log(`Filtered ${response.data.length} orders`);
+        console.log(`Filtered ${paidOrders.length} paid orders`);
       } catch (error) {
         console.error(
           "Filter orders error:",
@@ -251,11 +259,15 @@ const AdminDashboard = () => {
             timeout: 10000,
           })
         );
-        setFilteredOrders(response.data);
-        if (response.data.length === 0) {
-          toast.info("No orders found for the provided Order ID.");
+        // Filter orders to only include those with paymentStatus: "Paid"
+        const paidOrders = response.data.filter(
+          (order) => order.paymentStatus === "Paid"
+        );
+        setFilteredOrders(paidOrders);
+        if (paidOrders.length === 0) {
+          toast.info("No successful orders found for the provided Order ID.");
         }
-        console.log(`Searched ${response.data.length} orders`);
+        console.log(`Searched ${paidOrders.length} paid orders`);
       } catch (error) {
         console.error(
           "Search orders error:",
@@ -659,7 +671,7 @@ const AdminDashboard = () => {
                       </tbody>
                     </table>
                   ) : (
-                    <EmptyState message="No Orders Found for Selected Filters or Search" />
+                    <EmptyState message="No Successful Orders Found for Selected Filters or Search" />
                   )}
                 </>
               ) : (
