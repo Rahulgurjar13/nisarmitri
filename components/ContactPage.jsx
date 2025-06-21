@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import axios from "axios";
 
-// Toast Notification Component
+const getApiUrl = () => import.meta.env.VITE_API_URL || "http://localhost:5001";
+
 const Toast = ({ message, visible, onClose, type = "success" }) =>
   visible && (
     <div
@@ -34,12 +35,11 @@ const Toast = ({ message, visible, onClose, type = "success" }) =>
     </div>
   );
 
-// Success Message Component
 const SuccessMessage = ({ onReset }) => (
   <div className="text-center py-16 px-8 flex-grow flex items-center justify-center">
     <div>
       <div className="flex justify-center">
-        <div className="bg-green-100 p-4 rounded-full">
+        <div className="bg-green-100 p-4 rounded-xl">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-16 w-16 text-[#2F6844]"
@@ -70,7 +70,6 @@ const SuccessMessage = ({ onReset }) => (
   </div>
 );
 
-// Contact Form Component
 const ContactForm = ({
   formData,
   errors,
@@ -226,7 +225,6 @@ const ContactForm = ({
   </div>
 );
 
-// FAQ Card Component
 const FAQCard = ({ faqItems }) => (
   <div className="bg-white shadow-xl rounded-xl p-8 h-full flex flex-col">
     <h2 className="text-2xl font-bold text-gray-900 mb-6 border-b pb-4">
@@ -246,7 +244,6 @@ const FAQCard = ({ faqItems }) => (
 );
 
 const ContactPage = () => {
-  // State management
   const [toast, setToast] = useState({
     message: "",
     visible: false,
@@ -263,7 +260,45 @@ const ContactPage = () => {
   const [loading, setLoading] = useState(false);
   const [formSubmitted, setFormSubmitted] = useState(false);
 
-  // Form handling functions
+  const token = localStorage.getItem("token");
+  const handleCloseToast = useCallback(() => {
+    setToast({ message: "", visible: false, type: toast.type });
+  }, [toast.type]);
+
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, {
+        withCredentials: true,
+      });
+      localStorage.setItem("csrfToken", response.data.csrfToken);
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error("Failed to fetch CSRF token:", error);
+      throw new Error("Unable to fetch CSRF token");
+    }
+  };
+
+  const handleApiError = (error, operation) => {
+    const status = error.response?.status;
+    const message =
+      error.response?.data?.error || `Failed to ${operation}. Please try again.`;
+    console.error(`${operation} error:`, status, message);
+
+    if (status === 401 || status === 403) {
+      setToast({
+        message: "Session expired or unauthorized. Please log in again.",
+        visible: true,
+        type: "error",
+      });
+      localStorage.removeItem("token");
+      localStorage.removeItem("isAdmin");
+      localStorage.removeItem("userName");
+      setTimeout(handleCloseToast, 5000);
+      return { isCsrfError: message.includes("Invalid CSRF"), message };
+    }
+    return { isCsrfError: false, message };
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -271,7 +306,6 @@ const ContactPage = () => {
       [name]: value,
     }));
 
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,
@@ -312,13 +346,17 @@ const ContactPage = () => {
     if (validateForm()) {
       setLoading(true);
       try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
         const response = await axios.post(
-          "https://backendforshop.onrender.com/api/contact",
+          `${getApiUrl()}/api/contact`,
           formData,
           {
             headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
               "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
             },
+            withCredentials: true,
           }
         );
 
@@ -329,12 +367,8 @@ const ContactPage = () => {
           visible: true,
           type: "success",
         });
-        setTimeout(
-          () => setToast({ message: "", visible: false, type: "success" }),
-          5000
-        );
+        setTimeout(handleCloseToast, 5000);
 
-        // Reset form
         setFormData({
           name: "",
           email: "",
@@ -344,19 +378,56 @@ const ContactPage = () => {
         });
         setErrors({});
       } catch (error) {
-        const errorMsg =
-          error.response?.data?.error ||
-          "Failed to send message. Please try again.";
-        setToast({ message: errorMsg, visible: true, type: "error" });
+        const { isCsrfError, message } = handleApiError(error, "submit contact form");
+        setToast({ message, visible: true, type: "error" });
+        setTimeout(handleCloseToast, 5000);
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.post(
+              `${getApiUrl()}/api/contact`,
+              formData,
+              {
+                headers: {
+                  Authorization: token ? `Bearer ${token}` : undefined,
+                  "Content-Type": "application/json",
+                  "X-CSRF-Token": newCsrfToken,
+                },
+                withCredentials: true,
+              }
+            );
+            setFormSubmitted(true);
+            setToast({
+              message:
+                retryResponse.data.message ||
+                "Your message has been sent successfully!",
+              visible: true,
+              type: "success",
+            });
+            setTimeout(handleCloseToast, 5000);
+            setFormData({
+              name: "",
+              email: "",
+              phone: "",
+              subject: "",
+              message: "",
+            });
+            setErrors({});
+          } catch (retryError) {
+            const retryMessage =
+              retryError.response?.data?.error ||
+              "Failed to send message after CSRF refresh.";
+            setToast({ message: retryMessage, visible: true, type: "error" });
+            setTimeout(handleCloseToast, 5000);
+          }
+        }
         setErrors(error.response?.data?.errors || {});
-        console.error("Error submitting form:", error);
       } finally {
         setLoading(false);
       }
     }
   };
 
-  // FAQ data
   const faqItems = [
     {
       question: "What types of recycled products do you offer?",
@@ -383,8 +454,6 @@ const ContactPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-serif">
       <Navbar />
-
-      {/* Header Banner */}
       <div className="bg-[#1A3329] text-white py-16">
         <div className="container mx-auto px-6">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Contact Us</h1>
@@ -394,11 +463,8 @@ const ContactPage = () => {
           </p>
         </div>
       </div>
-
-      {/* Main Content */}
       <section className="container mx-auto px-6 py-16" id="contact-form">
         <div className="flex flex-col md:flex-row gap-12">
-          {/* Contact Form Card */}
           <div className="flex-1">
             <div className="bg-white shadow-xl rounded-xl overflow-hidden h-full flex flex-col">
               {formSubmitted ? (
@@ -414,24 +480,17 @@ const ContactPage = () => {
               )}
             </div>
           </div>
-
-          {/* FAQ Card */}
           <div className="flex-1">
             <FAQCard faqItems={faqItems} />
           </div>
         </div>
       </section>
-
-      {/* Toast Notification */}
       <Toast
         message={toast.message}
         visible={toast.visible}
-        onClose={() =>
-          setToast({ message: "", visible: false, type: toast.type })
-        }
+        onClose={handleCloseToast}
         type={toast.type}
       />
-
       <Footer />
     </div>
   );

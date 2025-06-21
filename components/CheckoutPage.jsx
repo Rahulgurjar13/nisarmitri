@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Footer from '../components/Footer'; // Adjust path as needed
 
-const BACKEND_URL = 'https://backendforshop.onrender.com';
+const getApiUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
-// Retry utility for API calls with sanitized logging
+// Utility for API retries with exponential backoff
 const withRetry = async (fn, retries = 3, delay = 6000) => {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
     } catch (error) {
-      if (i === retries - 1) throw new Error('API call failed after retries');
+      if (i === retries - 1) throw new Error(`API call failed after ${retries} retries: ${error.message}`);
       console.warn(`Retry ${i + 1}/${retries} failed: ${error.message}`);
-      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
+      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
     }
   }
 };
 
-// Sanitize input to prevent XSS
+// Input sanitization to prevent XSS
 const sanitizeInput = (input) => {
   if (typeof input !== 'string') return input;
   const div = document.createElement('div');
@@ -54,10 +54,40 @@ const CheckoutPage = () => {
   const [stateSearch, setStateSearch] = useState(formData.shippingAddress.state);
   const [showStateSuggestions, setShowStateSuggestions] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState(null);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const token = localStorage.getItem('token');
+  const subtotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [cartItems]);
 
-  // Scroll to section utility
+  // Calculate shipping cost based on backend logic
+  const calculateShippingCost = (subtotal) => {
+    if (subtotal >= 800) return 0;
+    if (subtotal >= 500) return 50;
+    return 80; // Updated default shipping cost to match initial formData
+  };
+
+  // Update shipping cost and coupon discount
+  useEffect(() => {
+    const originalShippingCost = calculateShippingCost(subtotal);
+    const shippingCost = formData.coupon.code.toUpperCase() === 'FREESHIPPING' ? 0 : originalShippingCost;
+    const couponDiscount = formData.coupon.code.toUpperCase() === 'FREESHIPPING' ? originalShippingCost : 0;
+
+    setFormData((prev) => ({
+      ...prev,
+      shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
+      coupon: { ...prev.coupon, discount: couponDiscount },
+    }));
+  }, [subtotal, formData.coupon.code]);
+
+  // Calculate total with minimum of ₹1
+  const total = useMemo(
+    () => Math.max(1, subtotal + formData.shippingMethod.cost - formData.coupon.discount),
+    [subtotal, formData.shippingMethod.cost, formData.coupon.discount]
+  );
+
+  const stableNavigate = useCallback((path, options) => navigate(path, options), [navigate]);
+
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -65,36 +95,48 @@ const CheckoutPage = () => {
     }
   };
 
-  // Calculate shipping cost and apply coupon
-  useEffect(() => {
-    let shippingCost = 80;
-    if (subtotal >= 800) shippingCost = 0;
-    else if (subtotal >= 500) shippingCost = 50;
-    if (formData.coupon.code.toUpperCase() === 'FREESHIPPING') shippingCost = 0;
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, { withCredentials: true });
+      localStorage.setItem('csrfToken', response.data.csrfToken);
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error('Failed to fetch CSRF token:', error);
+      throw new Error('Unable to fetch CSRF token');
+    }
+  };
 
-    setFormData((prev) => ({
-      ...prev,
-      shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
-      coupon: {
-        ...prev.coupon,
-        discount: formData.coupon.code.toUpperCase() === 'FREESHIPPING' ? prev.shippingMethod.cost : 0,
-      },
-    }));
-  }, [subtotal, formData.coupon.code]);
+  const handleApiError = (error, operation) => {
+    const status = error.response?.status;
+    const message = error.response?.data?.error || `Failed to ${operation}. Please try again later.`;
+    console.error(`${operation} error:`, { status, message });
 
-  // Initial checks and pending transaction handling
+    if (status === 401 || status === 403) {
+      if (message.includes('Invalid CSRF')) return { isCsrfError: true, message };
+      setError('Session expired or unauthorized. Please log in again.');
+      localStorage.removeItem('token');
+      localStorage.removeItem('isAdmin');
+      localStorage.removeItem('userName');
+      stableNavigate('/login');
+    } else {
+      setError(message);
+    }
+    return { isCsrfError: false, message };
+  };
+
+  // Check for pending transactions and redirect if cart is empty
   useEffect(() => {
     if (!cartItems.length && (step !== 3 || !order)) {
-      navigate('/shop', { replace: true });
+      stableNavigate('/shop', { replace: true });
     }
     const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
     if (pendingTransaction && step === 2) {
       setPendingOrderId(pendingTransaction.orderId);
       setError('A pending payment was detected. Please complete, retry, or cancel the payment.');
     }
-  }, [cartItems, navigate, step, order]);
+  }, [cartItems, stableNavigate, step, order]);
 
-  // Scroll to error message
+  // Scroll to error message when set
   useEffect(() => {
     if (error) scrollToSection('error-message');
   }, [error]);
@@ -104,13 +146,18 @@ const CheckoutPage = () => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    script.onload = () => console.log('Razorpay SDK loaded');
-    script.onerror = () => setError('Failed to load payment system. Please select Cash on Delivery.');
+    script.onload = () => {
+      console.log('Razorpay SDK loaded successfully');
+      setRazorpayLoaded(true);
+    };
+    script.onerror = () => {
+      console.error('Failed to load Razorpay SDK');
+      setError('Failed to load payment system. Please select Cash on Delivery.');
+    };
     document.body.appendChild(script);
     return () => document.body.removeChild(script);
   }, []);
 
-  // Form input handler with sanitization
   const handleChange = (e) => {
     const { name, value } = e.target;
     setError('');
@@ -126,30 +173,29 @@ const CheckoutPage = () => {
     }
   };
 
-  // Coupon application
   const applyCoupon = async () => {
     setCouponLoading(true);
     setError('');
     const couponCode = sanitizeInput(formData.coupon.code).toUpperCase();
+    const originalShippingCost = calculateShippingCost(subtotal);
+
     if (couponCode === 'FREESHIPPING') {
       setFormData((prev) => ({
         ...prev,
         shippingMethod: { ...prev.shippingMethod, cost: 0 },
-        coupon: { code: 'FREESHIPPING', discount: prev.shippingMethod.cost },
+        coupon: { code: 'FREESHIPPING', discount: originalShippingCost },
       }));
     } else {
       setError('Invalid coupon code');
-      let shippingCost = subtotal >= 800 ? 0 : subtotal >= 500 ? 50 : 80;
       setFormData((prev) => ({
         ...prev,
-        shippingMethod: { ...prev.shippingMethod, cost: shippingCost },
-        coupon: { code: prev.coupon.code, discount: 0 },
+        shippingMethod: { ...prev.shippingMethod, cost: originalShippingCost },
+        coupon: { code: '', discount: 0 },
       }));
     }
     setCouponLoading(false);
   };
 
-  // Step 1 form validation and submission
   const handleStep1Submit = (e) => {
     e.preventDefault();
     const { customer, shippingAddress, gstDetails } = formData;
@@ -176,23 +222,30 @@ const CheckoutPage = () => {
     if (gstDetails.gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstDetails.gstNumber)) {
       return setError('Please enter a valid GST number (e.g., 22AAAAA0000A1Z5)');
     }
+    if (total < 1) {
+      return setError('Order total must be at least ₹1 after discounts.');
+    }
 
     setStep(2);
   };
 
-  // Check pending order status
   const checkPendingOrderStatus = async (orderId) => {
     try {
       setLoading(true);
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const response = await withRetry(() =>
-        axios.get(`${BACKEND_URL}/api/orders/pending`, {
-          params: { orderId },
-          headers: { 'Content-Type': 'application/json' },
+        axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json',
+          },
           timeout: 10000,
+          withCredentials: true,
         })
       );
-      const pendingOrder = response.data.find((o) => o.orderId === orderId);
-      if (!pendingOrder) {
+      const pendingOrder = response.data;
+      if (!pendingOrder || pendingOrder.paymentStatus !== 'Pending') {
         localStorage.removeItem('pendingTransaction');
         setPendingOrderId(null);
         setError('Previous payment session expired or completed. Please start a new payment.');
@@ -200,42 +253,102 @@ const CheckoutPage = () => {
       }
       return pendingOrder;
     } catch (error) {
-      setError('Failed to check pending order status. Please try again or cancel the pending order.');
+      const { isCsrfError } = handleApiError(error, 'check pending order status');
+      if (isCsrfError) {
+        try {
+          const newCsrfToken = await fetchCsrfToken();
+          const retryResponse = await axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+            withCredentials: true,
+          });
+          const pendingOrder = retryResponse.data;
+          if (!pendingOrder || pendingOrder.paymentStatus !== 'Pending') {
+            localStorage.removeItem('pendingTransaction');
+            setPendingOrderId(null);
+            setError('Previous payment session expired or completed. Please start a new payment.');
+            return null;
+          }
+          return pendingOrder;
+        } catch (retryError) {
+          setError('Failed to check pending order status after CSRF refresh.');
+          return null;
+        }
+      }
       return null;
     } finally {
       setLoading(false);
     }
   };
 
-  // Cancel pending order
   const handleCancelPendingOrder = async () => {
     if (!pendingOrderId) return setError('No pending order found.');
     try {
       setLoading(true);
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       await withRetry(() =>
-        axios.delete(`${BACKEND_URL}/api/orders/pending/${pendingOrderId}`, {
-          headers: { 'Content-Type': 'application/json' },
+        axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json',
+          },
           timeout: 10000,
+          withCredentials: true,
         })
       );
-      localStorage.removeItem('pendingTransaction', null);
+      localStorage.removeItem('pendingTransaction');
       setPendingOrderId(null);
       setError('');
+      setShowCancelModal(false);
       setStep(2);
     } catch (error) {
-      setError('Failed to cancel pending order. Please try again or contact support.');
+      const { isCsrfError } = handleApiError(error, 'cancel pending order');
+      if (isCsrfError) {
+        try {
+          const newCsrfToken = await fetchCsrfToken();
+          await axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+            withCredentials: true,
+          });
+          localStorage.removeItem('pendingTransaction');
+          setPendingOrderId(null);
+          setError('');
+          setShowCancelModal(false);
+          setStep(2);
+        } catch (retryError) {
+          setError('Failed to cancel pending order after CSRF refresh.');
+        }
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Order submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
+    console.log('Submitting order with:', {
+      subtotal,
+      shippingCost: formData.shippingMethod.cost,
+      couponDiscount: formData.coupon.discount,
+      total,
+      paymentMethod: formData.paymentMethod,
+    });
+
     try {
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const items = cartItems.map((item) => ({
         productId: sanitizeInput(item.id),
         name: sanitizeInput(item.name),
@@ -243,7 +356,6 @@ const CheckoutPage = () => {
         price: item.price,
         variant: sanitizeInput(item.variant || ''),
       }));
-      const total = subtotal + formData.shippingMethod.cost - formData.coupon.discount;
       const orderData = {
         customer: {
           firstName: sanitizeInput(formData.customer.firstName),
@@ -276,8 +388,6 @@ const CheckoutPage = () => {
         total,
         paymentMethod: sanitizeInput(formData.paymentMethod),
         paymentStatus: formData.paymentMethod === 'COD' ? 'Paid' : 'Pending',
-        date: new Date().toISOString(),
-        emailSent: false,
       };
 
       if (formData.paymentMethod === 'Razorpay' && pendingOrderId) {
@@ -286,112 +396,252 @@ const CheckoutPage = () => {
       }
 
       const orderResponse = await withRetry(() =>
-        axios.post(`${BACKEND_URL}/api/orders`, orderData, {
-          headers: { 'Content-Type': 'application/json' },
+        axios.post(`${getApiUrl()}/api/orders`, orderData, {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json',
+          },
           timeout: 10000,
+          withCredentials: true,
         })
       );
 
+      const { order } = orderResponse.data || {};
+      if (!order?.orderId) throw new Error('Order creation failed: Missing orderId');
+
       if (formData.paymentMethod === 'Razorpay') {
-        const { orderId } = orderResponse.data.orderData || {};
-        if (!orderId) throw new Error('Order initiation failed: Missing orderId');
-
-        const razorpayPayload = {
-          orderId,
-          amount: Math.round(total * 100),
-          currency: 'INR',
-          receipt: `receipt_${orderId}`,
-          customer: {
-            name: `${sanitizeInput(formData.customer.firstName)} ${sanitizeInput(formData.customer.lastName)}`,
-            email: sanitizeInput(formData.customer.email),
-            contact: sanitizeInput(formData.customer.phone),
-          },
-          orderData: orderResponse.data.orderData,
-        };
-
+        console.log('Initiating Razorpay with total:', total);
         const razorpayResponse = await withRetry(() =>
-          axios.post(`${BACKEND_URL}/api/orders/initiate-razorpay-payment`, razorpayPayload, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 15000,
-          })
+          axios.post(
+            `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
+            { orderId: order.orderId },
+            {
+              headers: {
+                Authorization: token ? `Bearer ${token}` : undefined,
+                'X-CSRF-Token': csrfToken,
+                'Content-Type': 'application/json',
+              },
+              timeout: 15000,
+              withCredentials: true,
+            }
+          )
         );
 
-        const { razorpayOrderId, keyId, orderData } = razorpayResponse.data;
+        const { razorpayOrderId, keyId, orderData: responseOrderData } = razorpayResponse.data;
         if (!razorpayOrderId || !keyId) throw new Error('Invalid Razorpay response');
 
         localStorage.setItem(
           'pendingTransaction',
-          JSON.stringify({ orderId, razorpayOrderId, timestamp: Date.now() })
+          JSON.stringify({ orderId: order.orderId, razorpayOrderId, timestamp: Date.now() })
         );
-        setPendingOrderId(orderId);
+        setPendingOrderId(order.orderId);
 
-        if (!window.Razorpay) throw new Error('Razorpay SDK not loaded');
-
-        const options = {
-          key: keyId,
-          amount: total * 100,
-          currency: 'INR',
-          name: 'NISARGMAITRI',
-          description: `Order #${orderId}`,
-          order_id: razorpayOrderId,
-          handler: (response) =>
-            navigate('/payment-callback', {
-              state: {
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                cartItems,
-                orderData,
-              },
-            }),
-          prefill: {
-            name: `${sanitizeInput(formData.customer.firstName)} ${sanitizeInput(formData.customer.lastName)}`,
-            email: sanitizeInput(formData.customer.email),
-            contact: sanitizeInput(formData.customer.phone),
-          },
-          theme: { color: '#1A3329' },
-          modal: {
-            ondismiss: async () => {
-              const pendingOrder = await checkPendingOrderStatus(orderId);
-              if (pendingOrder) {
-                setError('Payment was cancelled. Your order is pending. Please retry or cancel payment.');
-                setStep(2);
-              } else {
-                setError('Payment session expired. Please start a new order.');
-                localStorage.removeItem('pendingTransaction');
-                setPendingOrderId(null);
-                setStep(2);
-              }
-              setLoading(false);
-            },
-          },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', (response) => {
-          setError(`Payment failed: ${response.error.description}. Please retry or cancel the pending order.`);
-          setStep(2);
-          setLoading(false);
-        });
-        rzp.open();
+        initiateRazorpayPayment(razorpayOrderId, keyId, responseOrderData, total, order);
       } else {
-        const { order } = orderResponse.data;
-        if (!order?.orderId) throw new Error('Order creation failed');
         setOrder(order);
         localStorage.removeItem('pendingTransaction');
-        localStorage.removeItem('cart'); // Clear cart after successful COD order
+        localStorage.removeItem('cart');
         setPendingOrderId(null);
         setStep(3);
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to process order. Please try again.';
-      setError(errorMsg.includes('duplicate key') ? 'Order ID already exists. Please try again.' : errorMsg);
+      const { isCsrfError } = handleApiError(error, 'process order');
+      if (isCsrfError) {
+        try {
+          const newCsrfToken = await fetchCsrfToken();
+          const retryResponse = await axios.post(`${getApiUrl()}/api/orders`, orderData, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+            withCredentials: true,
+          });
+          const { order } = retryResponse.data;
+          if (formData.paymentMethod === 'COD') {
+            setOrder(order);
+            localStorage.removeItem('pendingTransaction');
+            localStorage.removeItem('cart');
+            setPendingOrderId(null);
+            setStep(3);
+          } else {
+            setError('Razorpay retry after CSRF refresh not implemented.');
+          }
+        } catch (retryError) {
+          setError('Failed to process order after CSRF refresh.');
+        }
+      } else if (error.message.includes('duplicate key')) {
+        setError('Order ID already exists. Please try again.');
+      } else {
+        setError(error.response?.data?.error || 'Failed to process order. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Retry payment
+  const initiateRazorpayPayment = async (razorpayOrderId, keyId, orderData, total, order) => {
+    if (!razorpayLoaded) {
+      setError('Payment system is loading. Please wait or try again.');
+      setLoading(false);
+      return;
+    }
+
+    console.log('Initiating Razorpay payment:', {
+      razorpayOrderId,
+      keyId,
+      orderId: orderData.orderId,
+      total,
+    });
+
+    const options = {
+      key: keyId,
+      amount: Math.max(100, Math.round(total * 100)), // Ensure minimum ₹1 (100 paise)
+      currency: 'INR',
+      name: 'NISARGMAITRI',
+      description: `Order #${orderData.orderId}`,
+      order_id: razorpayOrderId,
+      handler: async (response) => {
+        console.log('Razorpay payment response:', {
+          payment_id: response.razorpay_payment_id,
+          order_id: response.razorpay_order_id,
+          signature: response.razorpay_signature,
+        });
+
+        try {
+          setLoading(true);
+          let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+          console.log('Verifying payment for order:', orderData.orderId);
+
+          const verifyResponse = await withRetry(() =>
+            axios.post(
+              `${getApiUrl()}/api/orders/verify-razorpay-payment`,
+              {
+                orderId: orderData.orderId,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              },
+              {
+                headers: {
+                  Authorization: token ? `Bearer ${token}` : undefined,
+                  'X-CSRF-Token': csrfToken,
+                  'Content-Type': 'application/json',
+                },
+                timeout: 10000,
+                withCredentials: true,
+              }
+            )
+          );
+
+          console.log('Verification response:', verifyResponse.data);
+
+          if (verifyResponse.data.success) {
+            console.log('Payment verified successfully for order:', orderData.orderId);
+            setOrder(verifyResponse.data.order || order);
+            localStorage.removeItem('pendingTransaction');
+            localStorage.removeItem('cart');
+            setPendingOrderId(null);
+            setStep(3);
+          } else {
+            console.error('Payment verification failed:', verifyResponse.data.message);
+            setError('Payment verification failed. Please retry or contact support.');
+            setStep(2);
+          }
+        } catch (error) {
+          console.error('Payment verification error:', error.message, error.stack);
+          const { isCsrfError } = handleApiError(error, 'verify payment');
+          if (isCsrfError) {
+            try {
+              const newCsrfToken = await fetchCsrfToken();
+              const retryResponse = await axios.post(
+                `${getApiUrl()}/api/orders/verify-razorpay-payment`,
+                {
+                  orderId: orderData.orderId,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                },
+                {
+                  headers: {
+                    Authorization: token ? `Bearer ${token}` : undefined,
+                    'X-CSRF-Token': newCsrfToken,
+                    'Content-Type': 'application/json',
+                  },
+                  timeout: 10000,
+                  withCredentials: true,
+                }
+              );
+              if (retryResponse.data.success) {
+                console.log('Payment verified successfully after CSRF retry:', orderData.orderId);
+                setOrder(retryResponse.data.order || order);
+                localStorage.removeItem('pendingTransaction');
+                localStorage.removeItem('cart');
+                setPendingOrderId(null);
+                setStep(3);
+              } else {
+                console.error('Payment verification failed after CSRF retry:', retryResponse.data.message);
+                setError('Payment verification failed after CSRF refresh. Please retry or contact support.');
+                setStep(2);
+              }
+            } catch (retryError) {
+              console.error('Payment verification retry error:', retryError.message, retryError.stack);
+              setError('Failed to verify payment after CSRF refresh. Please retry or contact support.');
+              setStep(2);
+            }
+          } else {
+            const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
+            setError(
+              pendingOrder
+                ? 'Payment verification failed. Your order is pending. Please retry or cancel.'
+                : 'Order session expired. Please start a new order.'
+            );
+            if (!pendingOrder) {
+              localStorage.removeItem('pendingTransaction');
+              setPendingOrderId(null);
+            }
+            setStep(2);
+          }
+        } finally {
+          setLoading(false);
+        }
+      },
+      prefill: {
+        name: `${sanitizeInput(formData.customer.firstName)} ${sanitizeInput(formData.customer.lastName)}`,
+        email: sanitizeInput(formData.customer.email),
+        contact: sanitizeInput(formData.customer.phone),
+      },
+      theme: { color: '#1A3329' },
+      modal: {
+        ondismiss: async () => {
+          console.log('Razorpay modal dismissed for order:', orderData.orderId);
+          const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
+          if (pendingOrder) {
+            setError('Payment was cancelled. Your order is pending. Please retry or cancel payment.');
+            setStep(2);
+          } else {
+            setError('Payment session expired. Please start a new order.');
+            localStorage.removeItem('pendingTransaction');
+            setPendingOrderId(null);
+            setStep(2);
+          }
+          setLoading(false);
+        },
+      },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.on('payment.failed', (response) => {
+      console.error('Payment failed:', response.error);
+      setError(`Payment failed: ${response.error.description}. Please retry or cancel the pending order.`);
+      setStep(2);
+      setLoading(false);
+    });
+    rzp.open();
+  };
+
   const handleRetryPayment = async () => {
     if (!pendingOrderId) return setError('No pending order found.');
     const pendingOrder = await checkPendingOrderStatus(pendingOrderId);
@@ -401,24 +651,21 @@ const CheckoutPage = () => {
     setError('');
 
     try {
-      const razorpayPayload = {
-        orderId: pendingOrderId,
-        amount: Math.round(pendingOrder.total * 100),
-        currency: 'INR',
-        receipt: `receipt_${pendingOrderId}`,
-        customer: {
-          name: `${sanitizeInput(formData.customer.firstName)} ${sanitizeInput(formData.customer.lastName)}`,
-          email: sanitizeInput(formData.customer.email),
-          contact: sanitizeInput(formData.customer.phone),
-        },
-        orderData: pendingOrder,
-      };
-
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const razorpayResponse = await withRetry(() =>
-        axios.post(`${BACKEND_URL}/api/orders/initiate-razorpay-payment`, razorpayPayload, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 15000,
-        })
+        axios.post(
+          `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
+          { orderId: pendingOrderId },
+          {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': csrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+            withCredentials: true,
+          }
+        )
       );
 
       const { razorpayOrderId, keyId, orderData } = razorpayResponse.data;
@@ -429,61 +676,17 @@ const CheckoutPage = () => {
         JSON.stringify({ orderId: pendingOrderId, razorpayOrderId, timestamp: Date.now() })
       );
 
-      const options = {
-        key: keyId,
-        amount: pendingOrder.total * 100,
-        currency: 'INR',
-        name: 'NISARGMAITRI',
-        description: `Order #${pendingOrderId}`,
-        order_id: razorpayOrderId,
-        handler: (response) =>
-          navigate('/payment-callback', {
-            state: {
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-              cartItems,
-              orderData,
-            },
-          }),
-        prefill: {
-          name: `${sanitizeInput(formData.customer.firstName)} ${sanitizeInput(formData.customer.lastName)}`,
-          email: sanitizeInput(formData.customer.email),
-          contact: sanitizeInput(formData.customer.phone),
-        },
-        theme: { color: '#1A3329' },
-        modal: {
-          ondismiss: async () => {
-            const pendingOrder = await checkPendingOrderStatus(pendingOrderId);
-            if (pendingOrder) {
-              setError('Payment was cancelled. Your order is pending. Please retry or cancel payment.');
-              setStep(2);
-            } else {
-              setError('Payment session expired. Please start a new order.');
-              localStorage.removeItem('pendingTransaction');
-              setPendingOrderId(null);
-              setStep(2);
-            }
-            setLoading(false);
-          },
-        },
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', (response) => {
-        setError(`Payment failed: ${response.error.description}. Please retry or cancel the pending order.`);
-        setStep(2);
-        setLoading(false);
-      });
-      rzp.open();
+      initiateRazorpayPayment(razorpayOrderId, keyId, orderData, pendingOrder.total, pendingOrder);
     } catch (error) {
-      setError('Failed to retry payment. Please try again or cancel the pending order.');
+      const { isCsrfError } = handleApiError(error, 'retry payment');
+      if (isCsrfError) {
+        setError('Failed to retry payment after CSRF refresh.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // State search handlers
   const handleStateSearch = (e) => {
     const value = sanitizeInput(e.target.value);
     setStateSearch(value);
@@ -503,122 +706,56 @@ const CheckoutPage = () => {
     setShowStateSuggestions(false);
   };
 
-  const total = subtotal + formData.shippingMethod.cost - formData.coupon.discount;
   const indianStates = [
-    'Andaman and Nicobar Islands', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
-    'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat',
-    'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka', 'Kerala',
-    'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
-    'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim',
-    'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands',
+    'Arunachal Pradesh',
+    'Assam',
+    'Bihar',
+    'Chandigarh',
+    'Chhattisgarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi',
+    'Goa',
+    'Gujarat',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jammu and Kashmir',
+    'Jharkhand',
+    'Karnataka',
+    'Kerala',
+    'Ladakh',
+    'Lakshadweep',
+    'Madhya Pradesh',
+    'Maharashtra',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Odisha',
+    'Puducherry',
+    'Punjab',
+    'Rajasthan',
+    'Sikkim',
+    'Tamil Nadu',
+    'Telangana',
+    'Tripura',
+    'Uttar Pradesh',
+    'Uttarakhand',
+    'West Bengal',
   ].sort();
 
   const filteredStates = indianStates.filter((state) =>
     state.toLowerCase().includes(stateSearch.toLowerCase())
   );
 
-  // Payment callback component
-  const PaymentCallback = () => {
-    useEffect(() => {
-      const verifyPayment = async () => {
-        const { razorpay_payment_id, razorpay_order_id, razorpay_signature, cartItems, orderData } = location.state || {};
-        const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
-
-        if (
-          !pendingTransaction ||
-          !razorpay_payment_id ||
-          !razorpay_order_id ||
-          !razorpay_signature ||
-          !orderData ||
-          pendingTransaction.razorpayOrderId !== razorpay_order_id
-        ) {
-          setError('Invalid payment data. Please try again.');
-          navigate('/checkout', { state: { step: 2, cartItems } });
-          return;
-        }
-
-        if (Date.now() - pendingTransaction.timestamp > 24 * 60 * 60 * 1000) {
-          setError('Transaction expired. Please initiate a new payment.');
-          localStorage.removeItem('pendingTransaction');
-          setPendingOrderId(null);
-          navigate('/checkout', { state: { step: 2, cartItems } });
-          return;
-        }
-
-        try {
-          setLoading(true);
-          const response = await withRetry(() =>
-            axios.post(
-              `${BACKEND_URL}/api/orders/verify-razorpay-payment`,
-              {
-                orderId: pendingTransaction.orderId,
-                razorpay_payment_id,
-                razorpay_order_id,
-                razorpay_signature,
-                orderData,
-              },
-              { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
-            )
-          );
-
-          if (response.data.success) {
-            setOrder(response.data.order);
-            localStorage.removeItem('pendingTransaction');
-            localStorage.removeItem('cart'); // Clear cart after successful Razorpay order
-            setPendingOrderId(null);
-            navigate('/checkout', { state: { order: response.data.order, step: 3, cartItems: [] } });
-          } else {
-            setError('Payment verification failed. Please retry or contact support.');
-            navigate('/checkout', { state: { step: 2, cartItems } });
-          }
-        } catch (error) {
-          const pendingOrder = await checkPendingOrderStatus(pendingTransaction.orderId);
-          setError(
-            pendingOrder
-              ? 'Payment verification failed. Your order is pending. Please retry or cancel.'
-              : 'Order session expired. Please start a new order.'
-          );
-          if (!pendingOrder) {
-            localStorage.removeItem('pendingTransaction');
-            setPendingOrderId(null);
-          }
-          navigate('/checkout', { state: { step: 2, cartItems } });
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      verifyPayment();
-    }, []);
-
-    return (
-      <div className="py-8 text-center">
-        <h2 className="text-2xl font-bold text-gray-900">Verifying Payment</h2>
-        <p className="mt-2 text-gray-600">Please wait while we confirm your payment.</p>
-        {loading && (
-          <svg className="mx-auto mt-4 h-8 w-8 animate-spin text-[#1A3329]" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        )}
-        {error && <p className="mt-4 text-red-600">{error}</p>}
-      </div>
-    );
-  };
-
-  if (location.pathname === '/payment-callback') return <PaymentCallback />;
-
+  // Removed PaymentCallback component as verification is now handled in handler
   return (
     <div className="min-h-screen bg-gray-50 font-serif">
       <header className="bg-[#1A3329] p-4 text-white shadow-md">
         <div className="container mx-auto flex items-center justify-between">
           <h1 className="text-2xl font-bold">NISARGMAITRI</h1>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => stableNavigate('/')}
             className="flex items-center text-sm hover:underline"
             aria-label="Continue Shopping"
           >
@@ -638,7 +775,6 @@ const CheckoutPage = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 sm:px-6">
-        {/* Progress Bar */}
         <div className="mb-8 flex justify-center">
           <div className="flex w-full max-w-3xl items-center">
             {['Information', 'Payment', 'Confirmation'].map((label, index) => (
@@ -686,7 +822,7 @@ const CheckoutPage = () => {
                     Retry Payment (Order #{pendingOrderId})
                   </button>
                   <button
-                    onClick={handleCancelPendingOrder}
+                    onClick={() => setShowCancelModal(true)}
                     className="inline-flex items-center rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
                     disabled={loading}
                   >
@@ -697,7 +833,34 @@ const CheckoutPage = () => {
             </div>
           )}
 
-          {/* Step 1: Billing Information */}
+          {/* Cancel Confirmation Modal */}
+          {showCancelModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+              <div className="rounded-lg bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-900">Confirm Cancellation</h3>
+                <p className="mt-2 text-sm text-gray-600">
+                  Are you sure you want to cancel the pending order #{pendingOrderId}?
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowCancelModal(false)}
+                    className="rounded-md bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
+                    disabled={loading}
+                  >
+                    No, Keep Order
+                  </button>
+                  <button
+                    onClick={handleCancelPendingOrder}
+                    className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                    disabled={loading}
+                  >
+                    {loading ? 'Canceling...' : 'Yes, Cancel'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {step === 1 && (
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
               <section className="lg:col-span-2 rounded-lg bg-white p-6 shadow-md">
@@ -870,7 +1033,7 @@ const CheckoutPage = () => {
                     <div>
                       <label
                         htmlFor="pincode"
-                        className="mb-1 block text-sm font-medium text-gray-700"
+                        className="mb-1 text-sm font-medium text-gray-700"
                       >
                         Pincode*
                       </label>
@@ -923,7 +1086,7 @@ const CheckoutPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => navigate('/shop')}
+                      onClick={() => stableNavigate('/shop')}
                       className="w-full rounded-md bg-gray-200 px-8 py-3 text-gray-800 hover:bg-gray-300 sm:w-auto"
                       disabled={loading}
                     >
@@ -973,7 +1136,6 @@ const CheckoutPage = () => {
             </div>
           )}
 
-          {/* Step 2: Payment Method */}
           {step === 2 && (
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
               <section className="lg:col-span-2 rounded-lg bg-white p-6 shadow-md">
@@ -1052,7 +1214,7 @@ const CheckoutPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => navigate('/shop')}
+                      onClick={() => stableNavigate('/shop')}
                       className="order-3 rounded-md bg-gray-200 px-6 py-3 text-gray-800 hover:bg-gray-300"
                       disabled={loading}
                     >
@@ -1144,7 +1306,6 @@ const CheckoutPage = () => {
             </div>
           )}
 
-          {/* Step 3: Order Confirmation */}
           {step === 3 && (
             <>
               {order ? (
@@ -1167,108 +1328,109 @@ const CheckoutPage = () => {
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900">Thank You for Your Order!</h2>
                     <p className="mt-2 text-gray-600">
-                      Your order has been confirmed and will be shipped soon.
+                      Your order #{order.orderId} has been successfully placed.
                     </p>
-                    <p className="mt-2 text-sm text-gray-600">
-                      A confirmation email has been sent to <span className="font-semibold">{sanitizeInput(order.customer.email)}</span>.
+                    <p className="mt-2 text-gray-600">
+                      A confirmation email has been sent to {order.customer.email}.
                     </p>
-                    <p className="mt-2 font-semibold text-gray-700">
-                      Order ID: <span className="font-bold">{order.orderId}</span>
-                    </p>
-                    {order.paymentMethod === 'Razorpay' && order.paymentId && (
-                      <p className="mt-1 text-sm text-gray-600">
-                        Payment ID: <span className="font-semibold">{order.paymentId}</span>
-                      </p>
-                    )}
                   </div>
-                  <div className="border-t border-b border-gray-200 py-6">
-                    <h3 className="mb-3 text-lg font-semibold text-gray-900">Order Summary</h3>
-                    <div className="space-y-2">
-                      {order.order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between py-2">
-                          <div className="flex flex-col items-start">
-                            <span className="text-sm font-medium text-gray-700">{sanitizeInput(item.name)}</span>
-                            <span className="text-xs text-gray-500">Quantity: {item.quantity}</span>
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Order Details</h3>
+                      <div className="mt-2 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Order ID</span>
+                          <span>{order.orderId}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Date</span>
+                          <span>{new Date(order.createdAt).toLocaleDateString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Payment Method</span>
+                          <span>{order.paymentMethod}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Payment Status</span>
+                          <span>{order.paymentStatus}</span>
+                        </div>
+                        {order.paymentMethod === 'Razorpay' && order.razorpayPaymentId && (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Payment ID</span>
+                              <span>{order.razorpayPaymentId}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Razorpay Order ID</span>
+                              <span>{order.razorpayOrderId}</span>
+                            </div>
+                          </>
+                        )}
+                        {order.items.map((item) => (
+                          <div key={item.productId} className="flex justify-between">
+                            <span className="text-sm text-gray-600">{item.name} x{item.quantity}</span>
+                            <span className="text-sm text-gray-600">
+                              ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                            </span>
                           </div>
-                          <span className="text-sm font-semibold text-gray-700">
-                            ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Shipping Address</h3>
+                      <p className="mt-2 text-sm text-gray-600">
+                        {order.customer.firstName} {order.customer.lastName}
+                        <br />
+                        {order.shippingAddress.address1}
+                        {order.shippingAddress.address2 && `, ${order.shippingAddress.address2}`}
+                        <br />
+                        {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.pincode}
+                        <br />
+                        {order.shippingAddress.country}
+                      </p>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Order Summary</h3>
+                      <div className="mt-2 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal</span>
+                          <span>
+                            ₹{order.items
+                              .reduce((sum, item) => sum + item.price * item.quantity, 0)
+                              .toLocaleString('en-IN')}
                           </span>
                         </div>
-                      ))}
-                    </div>
-                    <div className="mt-4 space-y-2 border-t border-gray-200 pt-4">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Subtotal:</span>
-                        <span>₹{subtotal.toLocaleString('en-IN')}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Shipping:</span>
-                        <span>₹{order.shippingMethod.cost.toLocaleString('en-IN')}</span>
-                      </div>
-                      {order.coupon?.discount > 0 && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Coupon Discount:</span>
-                          <span>-₹{order.coupon?.discount.toLocaleString('en-IN')}</span>
+                          <span className="text-gray-600">Shipping</span>
+                          <span>₹{order.shippingMethod.cost.toLocaleString('en-IN')}</span>
                         </div>
-                      )}
-                      <div className="flex justify-between text-lg font-semibold text-gray-700">
-                        <span>Total:</span>
-                        <span>₹{order.total.toLocaleString('en-IN')}</span>
+                        {order.coupon.discount > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Coupon Discount</span>
+                            <span>-₹{order.coupon.discount.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm font-bold">
+                          <span>Total</span>
+                          <span>₹{order.total.toLocaleString('en-IN')}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="my-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <div>
-                      <h3 className="mb-3 text-lg font-semibold text-gray-900">Customer Details:</h3>
-                      <p className="text-sm font-medium text-gray-600">
-                        {sanitizeInput(order.customer.firstName)} {sanitizeInput(order.customer.lastName)}
-                      </p>
-                      <p className="text-sm text-gray-600">{sanitizeInput(order.customer.email)}</p>
-                      <p className="text-sm text-gray-600">{sanitizeInput(order.customer.phone)}</p>
-                    </div>
-                    <div>
-                      <h3 className="mb-3 text-lg font-semibold text-gray-900">Shipping Details:</h3>
-                      <p className="text-sm font-medium text-gray-600">{sanitizeInput(order.shippingAddress.address1)}</p>
-                      {order.shippingAddress.address2 && (
-                        <p className="text-sm font-medium text-gray-600">{sanitizeInput(order.shippingAddress.address2)}</p>
-                      )}
-                      <p className="text-sm text-gray-600">
-                        {sanitizeInput(order.shippingAddress.city)}, {sanitizeInput(order.shippingAddress.state)} -{' '}
-                        {sanitizeInput(order.shippingAddress.pincode)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Method: {sanitizeInput(order.shippingMethod.type)}  
-                      </p>
-                    </div>
-                    {order.gstDetails?.gstNumber && (
-                      <div className="mt-6 col-span-full">
-                        <h3 className="mb-3 text-lg font-semibold text-gray-900">GST Details:</h3>
-                        <p className="text-sm font-medium text-gray-600">
-                          GST Number: {sanitizeInput(order.gstDetails.gstNumber)}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {sanitizeInput(order.gstDetails.city)}, {sanitizeInput(order.gstDetails.state)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-6 text-center">
                     <button
-                      onClick={() => navigate('/')}
-                      className="rounded-md bg-[#1A3329] px-6 py-2 text-sm font-medium text-white hover:bg-[#2F6844]"
-                      aria-label="Continue Browsing"
+                      onClick={() => stableNavigate('/')}
+                      className="w-full rounded-md bg-[#1A3329] px-6 py-3 text-white hover:bg-[#2F6844]"
                     >
-                      Continue Browsing
+                      Continue Shopping
                     </button>
                   </div>
                 </section>
               ) : (
-                <div className="mx-auto max-w-xl text-center py-6">
-                  <p className="text-red-600 text-sm">No order found. Please try again or contact support.</p>
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900">Order Not Found</h2>
+                  <p className="mt-2 text-gray-600">Something went wrong. Please try again.</p>
                   <button
-                    onClick={() => navigate('/shop')}
-                    className="mt-4 rounded-md bg-[#1A3329] px-6 py-2 text-sm font-medium text-white hover:bg-[#2F6844]"
-                    aria-label="Back to Shop"
+                    onClick={() => stableNavigate('/shop')}
+                    className="mt-4 rounded-md bg-[#1A3329] px-6 py-3 text-white hover:bg-[#2F6844]"
                   >
                     Back to Shop
                   </button>
@@ -1278,6 +1440,7 @@ const CheckoutPage = () => {
           )}
         </div>
       </main>
+
       <Footer />
     </div>
   );

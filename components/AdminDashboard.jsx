@@ -8,24 +8,11 @@ import debounce from "lodash/debounce";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const BACKEND_URL = "https://backendforshop.onrender.com";
-
-// Retry utility for API calls
-const withRetry = async (fn, retries = 3, delay = 1000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (i === retries - 1) throw error;
-      console.warn(`Retry ${i + 1}/${retries} failed:`, error.message);
-      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
-    }
-  }
-};
-
 const OrderRow = ({ order, onViewDetails }) => {
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
+    if (!dateString) return "N/A"; // Handle missing date
+    const date = new Date(dateString);
+    return isNaN(date) ? "Invalid Date" : date.toLocaleDateString("en-IN", {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -38,7 +25,7 @@ const OrderRow = ({ order, onViewDetails }) => {
       <td className="py-4 px-6 text-gray-600">
         {order.customer.firstName} {order.customer.lastName}
       </td>
-      <td className="py-4 px-6 text-gray-600">{formatDate(order.date)}</td>
+      <td className="py-4 px-6 text-gray-600">{formatDate(order.createdAt || order.date)}</td> {/* Use createdAt or fallback to date */}
       <td className="py-4 px-6 text-gray-600">
         ₹{order.total.toLocaleString("en-IN")}
       </td>
@@ -81,102 +68,248 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [error, setError] = useState(null);
-  const [filterDate, setFilterDate] = useState(
-    new Date().toISOString().split("T")[0]
-  ); // Default to today
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
   const [searchOrderId, setSearchOrderId] = useState("");
   const [isFiltering, setIsFiltering] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
   const lastFilterParams = useRef({});
   const prevFilterDate = useRef(new Date().toISOString().split("T")[0]);
-  const renderCount = useRef(0);
   const isFilterPending = useRef(false);
+  const eventSourceRef = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
 
   const token = localStorage.getItem("token");
   const stableNavigate = useCallback((path) => navigate(path), [navigate]);
-
-  // Track renders for debugging
-  renderCount.current += 1;
-  console.log(`Render count: ${renderCount.current}`);
-
-  // Memoize orders to stabilize handleFilterOrders
   const memoizedOrders = useMemo(() => orders, [orders]);
 
-  const fetchOrders = useCallback(async () => {
+  const getApiUrl = () => import.meta.env.VITE_API_URL || "http://localhost:5001";
+
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, {
+        withCredentials: true,
+      });
+      localStorage.setItem("csrfToken", response.data.csrfToken);
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error("Failed to fetch CSRF token:", error);
+      throw new Error("Unable to fetch CSRF token");
+    }
+  };
+
+  const withRetry = async (fn, retries = 3, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await fn();
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        console.warn(`Retry ${i + 1}/${retries} failed:`, error.message);
+        await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
+      }
+    }
+  };
+
+  const handleApiError = (error, operation) => {
+    const status = error.response?.status;
+    const message = error.response?.data?.error || `Failed to ${operation}. Please try again later.`;
+    console.error(`${operation} error:`, status, message);
+
+    if (status === 401 || status === 403) {
+      if (message.includes("Invalid CSRF")) {
+        return { isCsrfError: true, message };
+      }
+      setError("Session expired or unauthorized. Please log in again.");
+      localStorage.removeItem("token");
+      localStorage.removeItem("isAdmin");
+      localStorage.removeItem("userName");
+      stableNavigate("/login");
+    } else {
+      setError(message);
+      toast.error(message);
+    }
+    return { isCsrfError: false, message };
+  };
+
+  const applyFilters = useCallback(
+    (ordersToFilter) => {
+      let filtered = ordersToFilter.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+      if (filterDate && filterDate !== new Date().toISOString().split("T")[0]) {
+        filtered = filtered.filter(
+          (order) => {
+            const orderDate = order.createdAt || order.date; // Use createdAt or fallback to date
+            return orderDate && new Date(orderDate).toISOString().split("T")[0] === filterDate;
+          }
+        );
+      }
+      if (searchOrderId.trim()) {
+        filtered = filtered.filter((order) =>
+          order.orderId.toLowerCase().includes(searchOrderId.trim().toLowerCase())
+        );
+      }
+      return filtered;
+    },
+    [filterDate, searchOrderId]
+  );
+
+  const fetchOrders = useCallback(
+    async (params = {}) => {
+      if (!token) {
+        setError("Please log in to access the dashboard.");
+        stableNavigate("/login");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
+        const response = await withRetry(() =>
+          axios.get(`${getApiUrl()}/api/orders`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-CSRF-Token": csrfToken,
+            },
+            params,
+            timeout: 10000,
+            withCredentials: true,
+          })
+        );
+
+        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+        setOrders(paidOrders);
+        setFilteredOrders(applyFilters(paidOrders));
+        setError(null);
+        console.log(`Fetched ${paidOrders.length} successful/paid orders`);
+      } catch (error) {
+        const { isCsrfError } = handleApiError(error, "fetch orders");
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.get(`${getApiUrl()}/api/orders`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-CSRF-Token": newCsrfToken,
+              },
+              params,
+              timeout: 10000,
+              withCredentials: true,
+            });
+            const paidOrders = retryResponse.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+            setOrders(paidOrders);
+            setFilteredOrders(applyFilters(paidOrders));
+            setError(null);
+            console.log(`Fetched ${paidOrders.length} successful/paid orders after CSRF retry`);
+          } catch (retryError) {
+            setError("Failed to load orders after CSRF refresh. Please log in again.");
+            toast.error("Session error. Please log in again.");
+            localStorage.removeItem("token");
+            localStorage.removeItem("isAdmin");
+            localStorage.removeItem("userName");
+            stableNavigate("/login");
+          }
+        } else {
+          setOrders([]);
+          setFilteredOrders([]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, stableNavigate, applyFilters]
+  );
+
+  const setupSSE = useCallback(() => {
     if (!token) {
-      setError("Please log in to access the dashboard.");
+      setError("Please log in to access SSE updates.");
       stableNavigate("/login");
       return;
     }
 
-    setLoading(true);
-    try {
-      console.log("Fetching orders with token:", token);
-      const ordersResponse = await withRetry(() =>
-        axios.get(`${BACKEND_URL}/api/orders`, {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 10000,
-        })
-      );
-      // Filter orders to only include those with paymentStatus: "Paid"
-      const paidOrders = ordersResponse.data.filter(
-        (order) => order.paymentStatus === "Paid"
-      );
-      setOrders(paidOrders);
-      setFilteredOrders(
-        filterDate
-          ? paidOrders.filter((order) =>
-              new Date(order.date)
-                .toISOString()
-                .startsWith(new Date(filterDate).toISOString().split("T")[0])
-            )
-          : paidOrders
-      );
-      setError(null);
-      if (paidOrders.length > orders.length) {
-        toast.success(`${paidOrders.length - orders.length} new order(s) loaded.`);
+    const connectSSE = () => {
+      const eventSource = new EventSource(`${getApiUrl()}/api/order-updates?token=${token}`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log("SSE connection established");
+        setSseConnected(true);
+        setError(null);
+        reconnectAttempts.current = 0;
+        toast.success("Real-time order updates connected.");
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("SSE event received:", data);
+
+          if (data.event === "newOrder" || data.event === "orderUpdated") {
+            const order = data.order;
+            if (['Success', 'Paid'].includes(order.paymentStatus)) { // Include both Success and Paid
+              setOrders((prevOrders) => {
+                const orderExists = prevOrders.some((o) => o.orderId === order.orderId);
+                const updatedOrders = orderExists
+                  ? prevOrders.map((o) => (o.orderId === order.orderId ? order : o))
+                  : [...prevOrders, order];
+                return updatedOrders;
+              });
+              setFilteredOrders((prevFiltered) => {
+                const filtered = applyFilters([...prevFiltered, order]);
+                return filtered;
+              });
+              toast.success(
+                `Order ${order.orderId} ${data.event === "newOrder" ? "created" : "updated"}.`
+              );
+            }
+          }
+        } catch (err) {
+          console.error("SSE message parsing error:", err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        console.error("SSE connection error");
+        setSseConnected(false);
+        eventSource.close();
+        if (reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = Math.pow(2, reconnectAttempts.current) * 1000;
+          reconnectAttempts.current += 1;
+          console.log(`Reconnecting SSE in ${delay}ms (attempt ${reconnectAttempts.current})`);
+          setTimeout(connectSSE, delay);
+        } else {
+          setError("Failed to maintain real-time updates. Please refresh the page.");
+          toast.error("Real-time updates disconnected. Please refresh.");
+        }
+      };
+    };
+
+    connectSSE();
+
+    return () => {
+      if (eventSourceRef.current) {
+        console.log("Closing SSE connection");
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
-      console.log(`Fetched ${paidOrders.length} paid orders`);
-    } catch (err) {
-      console.error(
-        "Fetch error:",
-        err.response?.status,
-        err.response?.data || err.message
-      );
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        setError("Session expired or unauthorized. Please log in again.");
-        localStorage.removeItem("token");
-        localStorage.removeItem("isAdmin");
-        localStorage.removeItem("userName");
-        stableNavigate("/login");
-      } else {
-        setError("Failed to load orders. Please try again later.");
-        toast.error("Failed to load orders. Please try again later.");
-        setOrders([]);
-        setFilteredOrders([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [token, stableNavigate, filterDate, orders.length]);
+    };
+  }, [token, stableNavigate, applyFilters]);
 
   useEffect(() => {
     let mounted = true;
-    let intervalId;
 
-    const fetchData = async () => {
+    const initialize = async () => {
       if (!mounted) return;
       await fetchOrders();
+      return setupSSE();
     };
 
-    fetchData();
-    intervalId = setInterval(fetchData, 30000); // Poll every 30 seconds
+    const cleanup = initialize();
 
     return () => {
       mounted = false;
-      clearInterval(intervalId);
+      cleanup.then((closeSSE) => closeSSE && closeSSE());
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, setupSSE]);
 
   const handleFilterOrders = useCallback(
     async (params) => {
@@ -185,15 +318,11 @@ const AdminDashboard = () => {
         return;
       }
 
-      // Skip if params haven't changed
       if (
         JSON.stringify(params) === JSON.stringify(lastFilterParams.current) &&
         filteredOrders.length > 0
       ) {
-        console.log(
-          "Skipping duplicate filter with params:",
-          JSON.stringify(params)
-        );
+        console.log("Skipping duplicate filter with params:", JSON.stringify(params));
         toast.info("No change in filter parameters.");
         return;
       }
@@ -201,32 +330,50 @@ const AdminDashboard = () => {
       setIsFiltering(true);
       isFilterPending.current = true;
       try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
         console.log("Filtering orders with params:", JSON.stringify(params));
         const response = await withRetry(() =>
-          axios.get(`${BACKEND_URL}/api/orders`, {
+          axios.get(`${getApiUrl()}/api/orders`, {
             params,
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-CSRF-Token": csrfToken,
+            },
             timeout: 10000,
+            withCredentials: true,
           })
         );
-        // Filter orders to only include those with paymentStatus: "Paid"
-        const paidOrders = response.data.filter(
-          (order) => order.paymentStatus === "Paid"
-        );
+
+        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
         setFilteredOrders(paidOrders);
         lastFilterParams.current = params;
         if (paidOrders.length === 0) {
           toast.info("No successful orders found for the selected date.");
         }
-        console.log(`Filtered ${paidOrders.length} paid orders`);
+        console.log(`Filtered ${paidOrders.length} successful/paid orders`);
       } catch (error) {
-        console.error(
-          "Filter orders error:",
-          error.response?.status,
-          error.response?.data || error.message
-        );
-        setError("Failed to filter orders. Please try again.");
-        toast.error("Failed to filter orders. Please try again.");
+        const { isCsrfError } = handleApiError(error, "filter orders");
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.get(`${getApiUrl()}/api/orders`, {
+              params,
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-CSRF-Token": newCsrfToken,
+              },
+              timeout: 10000,
+              withCredentials: true,
+            });
+            const paidOrders = retryResponse.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+            setFilteredOrders(paidOrders);
+            lastFilterParams.current = params;
+            console.log(`Filtered ${paidOrders.length} successful/paid orders after CSRF retry`);
+          } catch (retryError) {
+            setError("Failed to filter orders after CSRF refresh.");
+            toast.error("Failed to filter orders. Please try again.");
+          }
+        }
       } finally {
         setIsFiltering(false);
         isFilterPending.current = false;
@@ -242,7 +389,6 @@ const AdminDashboard = () => {
         return;
       }
 
-      // Skip if no order ID is provided
       if (!orderId.trim()) {
         setFilteredOrders(memoizedOrders);
         return;
@@ -250,32 +396,49 @@ const AdminDashboard = () => {
 
       setIsSearching(true);
       try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
         const params = { orderId: orderId.trim() };
         console.log("Searching orders with params:", JSON.stringify(params));
         const response = await withRetry(() =>
-          axios.get(`${BACKEND_URL}/api/orders`, {
+          axios.get(`${getApiUrl()}/api/orders`, {
             params,
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-CSRF-Token": csrfToken,
+            },
             timeout: 10000,
+            withCredentials: true,
           })
         );
-        // Filter orders to only include those with paymentStatus: "Paid"
-        const paidOrders = response.data.filter(
-          (order) => order.paymentStatus === "Paid"
-        );
+
+        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
         setFilteredOrders(paidOrders);
         if (paidOrders.length === 0) {
           toast.info("No successful orders found for the provided Order ID.");
         }
-        console.log(`Searched ${paidOrders.length} paid orders`);
+        console.log(`Searched ${paidOrders.length} successful/paid orders`);
       } catch (error) {
-        console.error(
-          "Search orders error:",
-          error.response?.status,
-          error.response?.data || error.message
-        );
-        setError("Failed to search orders. Please try again.");
-        toast.error("Failed to search orders. Please try again.");
+        const { isCsrfError } = handleApiError(error, "search orders");
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.get(`${getApiUrl()}/api/orders`, {
+              params: { orderId: orderId.trim() },
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-CSRF-Token": newCsrfToken,
+              },
+              timeout: 10000,
+              withCredentials: true,
+            });
+            const paidOrders = retryResponse.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+            setFilteredOrders(paidOrders);
+            console.log(`Searched ${paidOrders.length} successful/paid orders after CSRF retry`);
+          } catch (retryError) {
+            setError("Failed to search orders after CSRF refresh.");
+            toast.error("Failed to search orders. Please try again.");
+          }
+        }
       } finally {
         setIsSearching(false);
       }
@@ -284,25 +447,17 @@ const AdminDashboard = () => {
   );
 
   const debouncedHandleFilterOrders = useMemo(
-    () =>
-      debounce((params) => {
-        console.log("Debounced filter triggered with params:", JSON.stringify(params));
-        handleFilterOrders(params);
-      }, 600, { leading: false, trailing: true }),
+    () => debounce(handleFilterOrders, 600, { leading: false, trailing: true }),
     [handleFilterOrders]
   );
 
   const debouncedHandleSearchOrders = useMemo(
-    () =>
-      debounce((orderId) => {
-        console.log("Debounced search triggered with orderId:", orderId);
-        handleSearchOrders(orderId);
-      }, 600, { leading: false, trailing: true }),
+    () => debounce(handleSearchOrders, 600, { leading: false, trailing: true }),
     [handleSearchOrders]
   );
 
   const clearFilters = () => {
-    setFilterDate(new Date().toISOString().split("T")[0]); // Reset to today
+    setFilterDate(new Date().toISOString().split("T")[0]);
     setSearchOrderId("");
     setFilteredOrders(memoizedOrders);
     lastFilterParams.current = {};
@@ -311,36 +466,23 @@ const AdminDashboard = () => {
     toast.success("Filters and search cleared.");
   };
 
-  // Trigger date filtering when filterDate changes
   useEffect(() => {
-    console.log("useEffect triggered with filterDate:", filterDate);
-
-    // Skip if filterDate hasn't changed or a filter is pending
     if (filterDate === prevFilterDate.current || isFilterPending.current) {
-      console.log(
-        `Skipping useEffect: filterDate unchanged (${filterDate}) or filter pending`
-      );
       return;
     }
 
-    const params = {};
-    if (filterDate) params.date = filterDate;
-
-    // Update prevFilterDate
+    const params = filterDate ? { date: filterDate } : {};
     prevFilterDate.current = filterDate;
 
-    // Only trigger if a date is set and different from today
-    if (filterDate && filterDate !== new Date().toISOString().split("T")[0]) {
+    if (filterDate !== new Date().toISOString().split("T")[0]) {
       debouncedHandleFilterOrders(params);
     } else {
-      setFilteredOrders(memoizedOrders);
+      setFilteredOrders(applyFilters(memoizedOrders));
       lastFilterParams.current = {};
     }
 
-    return () => {
-      debouncedHandleFilterOrders.cancel();
-    };
-  }, [filterDate, debouncedHandleFilterOrders, memoizedOrders]);
+    return () => debouncedHandleFilterOrders.cancel();
+  }, [filterDate, debouncedHandleFilterOrders, memoizedOrders, applyFilters]);
 
   const handleViewOrderDetails = (order) => setSelectedOrder(order);
 
@@ -351,10 +493,7 @@ const AdminDashboard = () => {
     stableNavigate("/");
   };
 
-  const handleSearchClick = () => {
-    console.log("Search button clicked with orderId:", searchOrderId);
-    debouncedHandleSearchOrders(searchOrderId);
-  };
+  const handleSearchClick = () => debouncedHandleSearchOrders(searchOrderId);
 
   const isFilterButtonDisabled = useMemo(
     () => isFiltering || loading || filterDate === prevFilterDate.current,
@@ -367,11 +506,7 @@ const AdminDashboard = () => {
       doc.setFontSize(18);
       doc.text(`Invoice: ${order.orderId || "N/A"}`, 14, 20);
       doc.setFontSize(10);
-      doc.text(
-        `Date: ${new Date(order.date).toLocaleDateString("en-IN")}`,
-        14,
-        28
-      );
+      doc.text(`Date: ${new Date(order.createdAt || order.date).toLocaleDateString("en-IN")}`, 14, 28); // Use createdAt or fallback to date
 
       doc.setFontSize(12);
       doc.text("Customer Information", 14, 40);
@@ -379,12 +514,7 @@ const AdminDashboard = () => {
         startY: 45,
         head: [["Field", "Details"]],
         body: [
-          [
-            "Name",
-            `${order.customer?.firstName || ""} ${
-              order.customer?.lastName || ""
-            }`,
-          ],
+          ["Name", `${order.customer?.firstName || ""} ${order.customer?.lastName || ""}`],
           ["Email", order.customer?.email || "N/A"],
           ["Phone", order.customer?.phone || "N/A"],
         ],
@@ -397,20 +527,14 @@ const AdminDashboard = () => {
       let shippingY = doc.lastAutoTable.finalY + 10;
       doc.setFontSize(12);
       doc.text("Shipping Details", 14, shippingY);
-      const shippingBody = [
-        ["Address Line 1", order.shippingAddress?.address1 || "N/A"],
-      ];
-      if (order.shippingAddress?.address2)
+      const shippingBody = [["Address Line 1", order.shippingAddress?.address1 || "N/A"]];
+      if (order.shippingAddress?.address2) {
         shippingBody.push(["Address Line 2", order.shippingAddress.address2]);
+      }
       shippingBody.push(
-        [
-          "City/State",
-          `${order.shippingAddress?.city || ""}, ${
-            order.shippingAddress?.state || ""
-          }`,
-        ],
+        ["City/State", `${order.shippingAddress?.city || ""}, ${order.shippingAddress?.state || ""}`],
         ["Pincode", order.shippingAddress?.pincode || "N/A"],
-        ["Shipping Method", order.shippingMethod?.type || "Standard"],
+        ["Shipping Method", order.shippingMethod?.type || "Standard"]
       );
       autoTable(doc, {
         startY: shippingY + 5,
@@ -431,12 +555,8 @@ const AdminDashboard = () => {
         body: (order.items || []).map((item) => [
           item.name || "Unknown Item",
           item.quantity || 0,
-          (item.price || 0)
-            .toLocaleString("en-IN", { style: "currency", currency: "INR" })
-            .replace("INR", "₹"),
-          ((item.price || 0) * (item.quantity || 0))
-            .toLocaleString("en-IN", { style: "currency", currency: "INR" })
-            .replace("INR", "₹"),
+          (item.price || 0).toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹"),
+          ((item.price || 0) * (item.quantity || 0)).toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹"),
         ]),
         styles: { fontSize: 10, cellPadding: 3, overflow: "linebreak" },
         headStyles: { fillColor: [26, 51, 41], textColor: [255, 255, 255] },
@@ -454,19 +574,9 @@ const AdminDashboard = () => {
       autoTable(doc, {
         startY: totalY,
         body: [
-          [
-            "Grand Total",
-            (order.total || 0)
-              .toLocaleString("en-IN", { style: "currency", currency: "INR" })
-              .replace("INR", "₹"),
-          ],
+          ["Grand Total", (order.total || 0).toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹")],
         ],
-        styles: {
-          fontSize: 11,
-          cellPadding: 3,
-          fontStyle: "bold",
-          halign: "right",
-        },
+        styles: { fontSize: 11, cellPadding: 3, fontStyle: "bold", halign: "right" },
         columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 40 } },
       });
 
@@ -474,10 +584,11 @@ const AdminDashboard = () => {
       doc.setFontSize(12);
       doc.text("Payment Information", 14, paymentY);
       const paymentBody = [["Payment Method", order.paymentMethod || "N/A"]];
-      if (order.paymentMethod !== "COD" && order.paymentId) {
+      if (order.paymentMethod !== "COD") {
         paymentBody.push(
-          ["Payment ID", order.paymentId],
-          ["Status", "Paid"],
+          ["Payment ID", order.razorpayPaymentId || "N/A"], // Use razorpayPaymentId
+          ["Razorpay Order ID", order.razorpayOrderId || "N/A"],
+          ["Status", order.paymentStatus || "N/A"]
         );
       }
       autoTable(doc, {
@@ -506,21 +617,30 @@ const AdminDashboard = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-4 md:mb-0">
             Admin Dashboard - Orders
           </h1>
-          <button
-            onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-md transition-colors duration-300"
-            disabled={loading}
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-4">
+            <span
+              className={`text-sm ${
+                sseConnected ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {sseConnected ? "Real-time updates: Connected" : "Real-time updates: Disconnected"}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-md transition-colors duration-300"
+              disabled={loading}
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {loading ? (
             <div className="animate-pulse p-6">
               <div className="space-y-4">
-                {[1, 2, 3, 4].map((item) => (
-                  <div key={item} className="flex items-center space-x-4">
+                {[1, 2, 3, 4].map((idx) => (
+                  <div key={idx} className="flex items-center space-x-4">
                     <div className="w-12 h-12 bg-gray-300 rounded"></div>
                     <div className="flex-1 space-y-2">
                       <div className="h-4 bg-gray-300 rounded w-1/3"></div>
@@ -592,9 +712,7 @@ const AdminDashboard = () => {
                         />
                       </div>
                       <button
-                        onClick={() =>
-                          debouncedHandleFilterOrders({ date: filterDate })
-                        }
+                        onClick={() => debouncedHandleFilterOrders({ date: filterDate })}
                         className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
                         disabled={isFilterButtonDisabled}
                       >
@@ -624,40 +742,26 @@ const AdminDashboard = () => {
                           r="10"
                           stroke="currentColor"
                           strokeWidth="4"
-                        ></circle>
+                        />
                         <path
                           className="opacity-75"
                           fill="currentColor"
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
+                        />
                       </svg>
-                      <p>
-                        {isFiltering ? "Filtering orders..." : "Searching orders..."}
-                      </p>
+                      <p>{isFiltering ? "Filtering orders..." : "Searching orders..."}</p>
                     </div>
                   )}
                   {filteredOrders.length > 0 ? (
                     <table className="min-w-full">
                       <thead className="bg-gray-100">
                         <tr>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                            Order ID
-                          </th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                            Customer
-                          </th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                            Date
-                          </th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                            Total
-                          </th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                            Payment Method
-                          </th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">
-                            Actions
-                          </th>
+                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Order ID</th>
+                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Customer</th>
+                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Date</th>
+                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Total</th>
+                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Payment Method</th>
+                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -671,7 +775,7 @@ const AdminDashboard = () => {
                       </tbody>
                     </table>
                   ) : (
-                    <EmptyState message="No Successful Orders Found for Selected Filters or Search" />
+                    <EmptyState message="No Orders Found for Selected Filters or Search" />
                   )}
                 </>
               ) : (
@@ -710,43 +814,25 @@ const AdminDashboard = () => {
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        Customer Information
-                      </h3>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Information</h3>
                       <p>{`${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName}`}</p>
                       <p>{selectedOrder.customer.email}</p>
                       <p>{selectedOrder.customer.phone}</p>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        Shipping Details
-                      </h3>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Shipping Details</h3>
                       <p>{selectedOrder.shippingAddress.address1}</p>
-                      {selectedOrder.shippingAddress.address2 && (
-                        <p>{selectedOrder.shippingAddress.address2}</p>
-                      )}
+                      {selectedOrder.shippingAddress.address2 && <p>{selectedOrder.shippingAddress.address2}</p>}
                       <p>{`${selectedOrder.shippingAddress.city}, ${selectedOrder.shippingAddress.state} - ${selectedOrder.shippingAddress.pincode}`}</p>
-                      <p>
-                        Shipping Method:{" "}
-                        {selectedOrder.shippingMethod?.type || "Standard"}
-                      </p>
+                      <p>Shipping Method: {selectedOrder.shippingMethod?.type || "N/A"}</p>
                     </div>
                   </div>
                   <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Items
-                    </h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Items Purchased</h3>
                     {selectedOrder.items.map((item, index) => (
-                      <div
-                        key={index}
-                        className="flex justify-between py-2 border-b"
-                      >
-                        <span>
-                          {item.name} (x{item.quantity})
-                        </span>
-                        <span>
-                          ₹{(item.price * item.quantity).toLocaleString("en-IN")}
-                        </span>
+                      <div key={index} className="flex justify-between py-2 border-b">
+                        <span>{item.name} (x{item.quantity})</span>
+                        <span>₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
                       </div>
                     ))}
                     <div className="flex justify-between font-bold mt-4">
@@ -755,17 +841,15 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                   <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      Payment Information
-                    </h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Information</h3>
                     <p>Payment Method: {selectedOrder.paymentMethod}</p>
-                    {selectedOrder.paymentMethod !== "COD" &&
-                      selectedOrder.paymentId && (
-                        <>
-                          <p>Payment ID: {selectedOrder.paymentId}</p>
-                          <p>Status: Paid</p>
-                        </>
-                      )}
+                    {selectedOrder.paymentMethod !== "COD" && (
+                      <>
+                        <p>Payment ID: {selectedOrder.razorpayPaymentId || "N/A"}</p>
+                        <p>Razorpay Order ID: {selectedOrder.razorpayOrderId || "N/A"}</p>
+                        <p>Status: {selectedOrder.paymentStatus || "N/A"}</p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
