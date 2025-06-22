@@ -86,6 +86,19 @@ const AdminDashboard = () => {
 
   const getApiUrl = () => import.meta.env.VITE_API_URL || "https://backendforshop.onrender.com";
 
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, {
+        withCredentials: true,
+      });
+      localStorage.setItem("csrfToken", response.data.csrfToken);
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error("Failed to fetch CSRF token:", error);
+      throw new Error("Unable to fetch CSRF token");
+    }
+  };
+
   const withRetry = async (fn, retries = 3, delay = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
@@ -104,6 +117,9 @@ const AdminDashboard = () => {
     console.error(`${operation} error:`, status, message);
 
     if (status === 401 || status === 403) {
+      if (message.includes("Invalid CSRF")) {
+        return { isCsrfError: true, message };
+      }
       setError("Session expired or unauthorized. Please log in again.");
       localStorage.removeItem("token");
       localStorage.removeItem("isAdmin");
@@ -113,7 +129,7 @@ const AdminDashboard = () => {
       setError(message);
       toast.error(message);
     }
-    return { message };
+    return { isCsrfError: false, message };
   };
 
   const applyFilters = useCallback(
@@ -147,11 +163,12 @@ const AdminDashboard = () => {
 
       setLoading(true);
       try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
         const response = await withRetry(() =>
           axios.get(`${getApiUrl()}/api/orders`, {
             headers: {
               Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
             },
             params,
             timeout: 10000,
@@ -165,9 +182,36 @@ const AdminDashboard = () => {
         setError(null);
         console.log(`Fetched ${paidOrders.length} successful/paid orders`);
       } catch (error) {
-        handleApiError(error, "fetch orders");
-        setOrders([]);
-        setFilteredOrders([]);
+        const { isCsrfError } = handleApiError(error, "fetch orders");
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.get(`${getApiUrl()}/api/orders`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-CSRF-Token": newCsrfToken,
+              },
+              params,
+              timeout: 10000,
+              withCredentials: true,
+            });
+            const paidOrders = retryResponse.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+            setOrders(paidOrders);
+            setFilteredOrders(applyFilters(paidOrders));
+            setError(null);
+            console.log(`Fetched ${paidOrders.length} successful/paid orders after CSRF retry`);
+          } catch (retryError) {
+            setError("Failed to load orders after CSRF refresh. Please log in again.");
+            toast.error("Session error. Please log in again.");
+            localStorage.removeItem("token");
+            localStorage.removeItem("isAdmin");
+            localStorage.removeItem("userName");
+            stableNavigate("/login");
+          }
+        } else {
+          setOrders([]);
+          setFilteredOrders([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -286,12 +330,14 @@ const AdminDashboard = () => {
       setIsFiltering(true);
       isFilterPending.current = true;
       try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
+        console.log("Filtering orders with params:", JSON.stringify(params));
         const response = await withRetry(() =>
           axios.get(`${getApiUrl()}/api/orders`, {
             params,
             headers: {
               Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
             },
             timeout: 10000,
             withCredentials: true,
@@ -306,7 +352,28 @@ const AdminDashboard = () => {
         }
         console.log(`Filtered ${paidOrders.length} successful/paid orders`);
       } catch (error) {
-        handleApiError(error, "filter orders");
+        const { isCsrfError } = handleApiError(error, "filter orders");
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.get(`${getApiUrl()}/api/orders`, {
+              params,
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-CSRF-Token": newCsrfToken,
+              },
+              timeout: 10000,
+              withCredentials: true,
+            });
+            const paidOrders = retryResponse.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+            setFilteredOrders(paidOrders);
+            lastFilterParams.current = params;
+            console.log(`Filtered ${paidOrders.length} successful/paid orders after CSRF retry`);
+          } catch (retryError) {
+            setError("Failed to filter orders after CSRF refresh.");
+            toast.error("Failed to filter orders. Please try again.");
+          }
+        }
       } finally {
         setIsFiltering(false);
         isFilterPending.current = false;
@@ -329,6 +396,7 @@ const AdminDashboard = () => {
 
       setIsSearching(true);
       try {
+        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
         const params = { orderId: orderId.trim() };
         console.log("Searching orders with params:", JSON.stringify(params));
         const response = await withRetry(() =>
@@ -336,7 +404,7 @@ const AdminDashboard = () => {
             params,
             headers: {
               Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
             },
             timeout: 10000,
             withCredentials: true,
@@ -350,7 +418,27 @@ const AdminDashboard = () => {
         }
         console.log(`Searched ${paidOrders.length} successful/paid orders`);
       } catch (error) {
-        handleApiError(error, "search orders");
+        const { isCsrfError } = handleApiError(error, "search orders");
+        if (isCsrfError) {
+          try {
+            const newCsrfToken = await fetchCsrfToken();
+            const retryResponse = await axios.get(`${getApiUrl()}/api/orders`, {
+              params: { orderId: orderId.trim() },
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "X-CSRF-Token": newCsrfToken,
+              },
+              timeout: 10000,
+              withCredentials: true,
+            });
+            const paidOrders = retryResponse.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+            setFilteredOrders(paidOrders);
+            console.log(`Searched ${paidOrders.length} successful/paid orders after CSRF retry`);
+          } catch (retryError) {
+            setError("Failed to search orders after CSRF refresh.");
+            toast.error("Failed to search orders. Please try again.");
+          }
+        }
       } finally {
         setIsSearching(false);
       }

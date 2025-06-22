@@ -15,6 +15,19 @@ const Login = () => {
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, {
+        withCredentials: true,
+      });
+      console.log("Fetched CSRF token:", response.data.csrfToken);
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error("Failed to fetch CSRF token:", error.message, error.response?.data);
+      throw new Error("Failed to fetch CSRF token");
+    }
+  };
+
   const handleApiError = (error, operation) => {
     const status = error.response?.status;
     let message = `Failed to ${operation}. Please try again.`;
@@ -77,6 +90,9 @@ const Login = () => {
     setLoading(true);
 
     try {
+      const csrfToken = await fetchCsrfToken();
+      console.log("Sending login request with CSRF token:", csrfToken);
+      
       const response = await axios.post(
         `${getApiUrl()}/api/auth/login`,
         {
@@ -86,6 +102,7 @@ const Login = () => {
         {
           headers: {
             "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
           },
           withCredentials: true,
           timeout: 10000, // 10 second timeout
