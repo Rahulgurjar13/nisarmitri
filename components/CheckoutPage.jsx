@@ -97,8 +97,11 @@ const CheckoutPage = () => {
 
   const fetchCsrfToken = async () => {
     try {
+      // Clear stale CSRF token from localStorage
+      localStorage.removeItem('csrfToken');
       const response = await axios.get(`${getApiUrl()}/api/csrf-token`, { withCredentials: true });
       localStorage.setItem('csrfToken', response.data.csrfToken);
+      console.log('Fetched new CSRF token:', response.data.csrfToken);
       return response.data.csrfToken;
     } catch (error) {
       console.error('Failed to fetch CSRF token:', error);
@@ -232,7 +235,7 @@ const CheckoutPage = () => {
   const checkPendingOrderStatus = async (orderId) => {
     try {
       setLoading(true);
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+      const csrfToken = await fetchCsrfToken(); // Always fetch fresh token
       const response = await withRetry(() =>
         axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
           headers: {
@@ -289,7 +292,7 @@ const CheckoutPage = () => {
     if (!pendingOrderId) return setError('No pending order found.');
     try {
       setLoading(true);
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+      const csrfToken = await fetchCsrfToken(); // Always fetch fresh token
       await withRetry(() =>
         axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
           headers: {
@@ -348,7 +351,7 @@ const CheckoutPage = () => {
     });
 
     try {
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+      const csrfToken = await fetchCsrfToken(); // Always fetch fresh token
       const items = cartItems.map((item) => ({
         productId: sanitizeInput(item.id),
         name: sanitizeInput(item.name),
@@ -512,7 +515,7 @@ const CheckoutPage = () => {
 
         try {
           setLoading(true);
-          let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+          const csrfToken = await fetchCsrfToken(); // Always fetch fresh token
           console.log('Verifying payment for order:', orderData.orderId);
 
           const verifyResponse = await withRetry(() =>
@@ -651,7 +654,7 @@ const CheckoutPage = () => {
     setError('');
 
     try {
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+      const csrfToken = await fetchCsrfToken(); // Always fetch fresh token
       const razorpayResponse = await withRetry(() =>
         axios.post(
           `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
