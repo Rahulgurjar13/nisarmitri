@@ -64,7 +64,7 @@ const CheckoutPage = () => {
   const calculateShippingCost = (subtotal) => {
     if (subtotal >= 800) return 0;
     if (subtotal >= 500) return 50;
-    return 80;
+    return 80; // Updated default shipping cost to match initial formData
   };
 
   // Update shipping cost and coupon discount
@@ -95,12 +95,24 @@ const CheckoutPage = () => {
     }
   };
 
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, { withCredentials: true });
+      localStorage.setItem('csrfToken', response.data.csrfToken);
+      return response.data.csrfToken;
+    } catch (error) {
+      console.error('Failed to fetch CSRF token:', error);
+      throw new Error('Unable to fetch CSRF token');
+    }
+  };
+
   const handleApiError = (error, operation) => {
     const status = error.response?.status;
     const message = error.response?.data?.error || `Failed to ${operation}. Please try again later.`;
     console.error(`${operation} error:`, { status, message });
 
     if (status === 401 || status === 403) {
+      if (message.includes('Invalid CSRF')) return { isCsrfError: true, message };
       setError('Session expired or unauthorized. Please log in again.');
       localStorage.removeItem('token');
       localStorage.removeItem('isAdmin');
@@ -109,6 +121,7 @@ const CheckoutPage = () => {
     } else {
       setError(message);
     }
+    return { isCsrfError: false, message };
   };
 
   // Check for pending transactions and redirect if cart is empty
@@ -116,8 +129,8 @@ const CheckoutPage = () => {
     if (!cartItems.length && (step !== 3 || !order)) {
       stableNavigate('/shop', { replace: true });
     }
-    const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction') || '{}');
-    if (pendingTransaction.orderId && step === 2) {
+    const pendingTransaction = JSON.parse(localStorage.getItem('pendingTransaction'));
+    if (pendingTransaction && step === 2) {
       setPendingOrderId(pendingTransaction.orderId);
       setError('A pending payment was detected. Please complete, retry, or cancel the payment.');
     }
@@ -160,7 +173,7 @@ const CheckoutPage = () => {
     }
   };
 
-  const applyCoupon = () => {
+  const applyCoupon = async () => {
     setCouponLoading(true);
     setError('');
     const couponCode = sanitizeInput(formData.coupon.code).toUpperCase();
@@ -219,10 +232,12 @@ const CheckoutPage = () => {
   const checkPendingOrderStatus = async (orderId) => {
     try {
       setLoading(true);
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const response = await withRetry(() =>
         axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -238,7 +253,32 @@ const CheckoutPage = () => {
       }
       return pendingOrder;
     } catch (error) {
-      handleApiError(error, 'check pending order status');
+      const { isCsrfError } = handleApiError(error, 'check pending order status');
+      if (isCsrfError) {
+        try {
+          const newCsrfToken = await fetchCsrfToken();
+          const retryResponse = await axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+            withCredentials: true,
+          });
+          const pendingOrder = retryResponse.data;
+          if (!pendingOrder || pendingOrder.paymentStatus !== 'Pending') {
+            localStorage.removeItem('pendingTransaction');
+            setPendingOrderId(null);
+            setError('Previous payment session expired or completed. Please start a new payment.');
+            return null;
+          }
+          return pendingOrder;
+        } catch (retryError) {
+          setError('Failed to check pending order status after CSRF refresh.');
+          return null;
+        }
+      }
       return null;
     } finally {
       setLoading(false);
@@ -249,10 +289,12 @@ const CheckoutPage = () => {
     if (!pendingOrderId) return setError('No pending order found.');
     try {
       setLoading(true);
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       await withRetry(() =>
         axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -265,7 +307,28 @@ const CheckoutPage = () => {
       setShowCancelModal(false);
       setStep(2);
     } catch (error) {
-      handleApiError(error, 'cancel pending order');
+      const { isCsrfError } = handleApiError(error, 'cancel pending order');
+      if (isCsrfError) {
+        try {
+          const newCsrfToken = await fetchCsrfToken();
+          await axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+            withCredentials: true,
+          });
+          localStorage.removeItem('pendingTransaction');
+          setPendingOrderId(null);
+          setError('');
+          setShowCancelModal(false);
+          setStep(2);
+        } catch (retryError) {
+          setError('Failed to cancel pending order after CSRF refresh.');
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -276,7 +339,16 @@ const CheckoutPage = () => {
     setLoading(true);
     setError('');
 
+    console.log('Submitting order with:', {
+      subtotal,
+      shippingCost: formData.shippingMethod.cost,
+      couponDiscount: formData.coupon.discount,
+      total,
+      paymentMethod: formData.paymentMethod,
+    });
+
     try {
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const items = cartItems.map((item) => ({
         productId: sanitizeInput(item.id),
         name: sanitizeInput(item.name),
@@ -327,6 +399,7 @@ const CheckoutPage = () => {
         axios.post(`${getApiUrl()}/api/orders`, orderData, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -338,6 +411,7 @@ const CheckoutPage = () => {
       if (!order?.orderId) throw new Error('Order creation failed: Missing orderId');
 
       if (formData.paymentMethod === 'Razorpay') {
+        console.log('Initiating Razorpay with total:', total);
         const razorpayResponse = await withRetry(() =>
           axios.post(
             `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
@@ -345,6 +419,7 @@ const CheckoutPage = () => {
             {
               headers: {
                 Authorization: token ? `Bearer ${token}` : undefined,
+                'X-CSRF-Token': csrfToken,
                 'Content-Type': 'application/json',
               },
               timeout: 15000,
@@ -371,10 +446,36 @@ const CheckoutPage = () => {
         setStep(3);
       }
     } catch (error) {
-      if (error.message.includes('duplicate key')) {
+      const { isCsrfError } = handleApiError(error, 'process order');
+      if (isCsrfError) {
+        try {
+          const newCsrfToken = await fetchCsrfToken();
+          const retryResponse = await axios.post(`${getApiUrl()}/api/orders`, orderData, {
+            headers: {
+              Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+            withCredentials: true,
+          });
+          const { order } = retryResponse.data;
+          if (formData.paymentMethod === 'COD') {
+            setOrder(order);
+            localStorage.removeItem('pendingTransaction');
+            localStorage.removeItem('cart');
+            setPendingOrderId(null);
+            setStep(3);
+          } else {
+            setError('Razorpay retry after CSRF refresh not implemented.');
+          }
+        } catch (retryError) {
+          setError('Failed to process order after CSRF refresh.');
+        }
+      } else if (error.message.includes('duplicate key')) {
         setError('Order ID already exists. Please try again.');
       } else {
-        handleApiError(error, 'process order');
+        setError(error.response?.data?.error || 'Failed to process order. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -388,6 +489,13 @@ const CheckoutPage = () => {
       return;
     }
 
+    console.log('Initiating Razorpay payment:', {
+      razorpayOrderId,
+      keyId,
+      orderId: orderData.orderId,
+      total,
+    });
+
     const options = {
       key: keyId,
       amount: Math.max(100, Math.round(total * 100)), // Ensure minimum ₹1 (100 paise)
@@ -396,8 +504,17 @@ const CheckoutPage = () => {
       description: `Order #${orderData.orderId}`,
       order_id: razorpayOrderId,
       handler: async (response) => {
+        console.log('Razorpay payment response:', {
+          payment_id: response.razorpay_payment_id,
+          order_id: response.razorpay_order_id,
+          signature: response.razorpay_signature,
+        });
+
         try {
           setLoading(true);
+          let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
+          console.log('Verifying payment for order:', orderData.orderId);
+
           const verifyResponse = await withRetry(() =>
             axios.post(
               `${getApiUrl()}/api/orders/verify-razorpay-payment`,
@@ -410,37 +527,83 @@ const CheckoutPage = () => {
               {
                 headers: {
                   Authorization: token ? `Bearer ${token}` : undefined,
+                  'X-CSRF-Token': csrfToken,
                   'Content-Type': 'application/json',
                 },
                 timeout: 10000,
                 withCredentials: true,
               }
-            )
-          );
+            ) 
+          ); 
+
+          console.log('Verification response:', verifyResponse.data);
 
           if (verifyResponse.data.success) {
+            console.log('Payment verified successfully for order:', orderData.orderId);
             setOrder(verifyResponse.data.order || order);
             localStorage.removeItem('pendingTransaction');
             localStorage.removeItem('cart');
             setPendingOrderId(null);
             setStep(3);
           } else {
+            console.error('Payment verification failed:', verifyResponse.data.message);
             setError('Payment verification failed. Please retry or contact support.');
             setStep(2);
           }
         } catch (error) {
-          handleApiError(error, 'verify payment');
-          const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
-          setError(
-            pendingOrder
-              ? 'Payment verification failed. Your order is pending. Please retry or cancel.'
-              : 'Order session expired. Please start a new order.'
-          );
-          if (!pendingOrder) {
-            localStorage.removeItem('pendingTransaction');
-            setPendingOrderId(null);
+          console.error('Payment verification error:', error.message, error.stack);
+          const { isCsrfError } = handleApiError(error, 'verify payment');
+          if (isCsrfError) {
+            try {
+              const newCsrfToken = await fetchCsrfToken();
+              const retryResponse = await axios.post(
+                `${getApiUrl()}/api/orders/verify-razorpay-payment`,
+                {
+                  orderId: orderData.orderId,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                },
+                {
+                  headers: {
+                    Authorization: token ? `Bearer ${token}` : undefined,
+                    'X-CSRF-Token': newCsrfToken,
+                    'Content-Type': 'application/json',
+                  },
+                  timeout: 10000,
+                  withCredentials: true,
+                }
+              );
+              if (retryResponse.data.success) {
+                console.log('Payment verified successfully after CSRF retry:', orderData.orderId);
+                setOrder(retryResponse.data.order || order);
+                localStorage.removeItem('pendingTransaction');
+                localStorage.removeItem('cart');
+                setPendingOrderId(null);
+                setStep(3);
+              } else {
+                console.error('Payment verification failed after CSRF retry:', retryResponse.data.message);
+                setError('Payment verification failed after CSRF refresh. Please retry or contact support.');
+                setStep(2);
+              }
+            } catch (retryError) {
+              console.error('Payment verification retry error:', retryError.message, retryError.stack);
+              setError('Failed to verify payment after CSRF refresh. Please retry or contact support.');
+              setStep(2);
+            }
+          } else {
+            const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
+            setError(
+              pendingOrder
+                ? 'Payment verification failed. Your order is pending. Please retry or cancel.'
+                : 'Order session expired. Please start a new order.'
+            );
+            if (!pendingOrder) {
+              localStorage.removeItem('pendingTransaction');
+              setPendingOrderId(null);
+            }
+            setStep(2);
           }
-          setStep(2);
         } finally {
           setLoading(false);
         }
@@ -453,6 +616,7 @@ const CheckoutPage = () => {
       theme: { color: '#1A3329' },
       modal: {
         ondismiss: async () => {
+          console.log('Razorpay modal dismissed for order:', orderData.orderId);
           const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
           if (pendingOrder) {
             setError('Payment was cancelled. Your order is pending. Please retry or cancel payment.');
@@ -470,6 +634,7 @@ const CheckoutPage = () => {
 
     const rzp = new window.Razorpay(options);
     rzp.on('payment.failed', (response) => {
+      console.error('Payment failed:', response.error);
       setError(`Payment failed: ${response.error.description}. Please retry or cancel the pending order.`);
       setStep(2);
       setLoading(false);
@@ -486,6 +651,7 @@ const CheckoutPage = () => {
     setError('');
 
     try {
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const razorpayResponse = await withRetry(() =>
         axios.post(
           `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
@@ -493,6 +659,7 @@ const CheckoutPage = () => {
           {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': csrfToken,
               'Content-Type': 'application/json',
             },
             timeout: 15000,
@@ -511,7 +678,10 @@ const CheckoutPage = () => {
 
       initiateRazorpayPayment(razorpayOrderId, keyId, orderData, pendingOrder.total, pendingOrder);
     } catch (error) {
-      handleApiError(error, 'retry payment');
+      const { isCsrfError } = handleApiError(error, 'retry payment');
+      if (isCsrfError) {
+        setError('Failed to retry payment after CSRF refresh.');
+      }
     } finally {
       setLoading(false);
     }
@@ -537,18 +707,48 @@ const CheckoutPage = () => {
   };
 
   const indianStates = [
-    'Andaman and Nicobar Islands', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh',
-    'Chhattisgarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat',
-    'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir', 'Jharkhand', 'Karnataka', 'Kerala',
-    'Ladakh', 'Lakshadweep', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
-    'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim',
-    'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands',
+    'Arunachal Pradesh',
+    'Assam',
+    'Bihar',
+    'Chandigarh',
+    'Chhattisgarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi',
+    'Goa',
+    'Gujarat',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jammu and Kashmir',
+    'Jharkhand',
+    'Karnataka',
+    'Kerala',
+    'Ladakh',
+    'Lakshadweep',
+    'Madhya Pradesh',
+    'Maharashtra',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Odisha',
+    'Puducherry',
+    'Punjab',
+    'Rajasthan',
+    'Sikkim',
+    'Tamil Nadu',
+    'Telangana',
+    'Tripura',
+    'Uttar Pradesh',
+    'Uttarakhand',
+    'West Bengal',
   ].sort();
 
   const filteredStates = indianStates.filter((state) =>
     state.toLowerCase().includes(stateSearch.toLowerCase())
   );
 
+  // Removed PaymentCallback component as verification is now handled in handler
   return (
     <div className="min-h-screen bg-gray-50 font-serif">
       <header className="bg-[#1A3329] p-4 text-white shadow-md">
@@ -598,7 +798,7 @@ const CheckoutPage = () => {
                   <div
                     className={`mx-2 h-1 flex-1 ${step > index + 1 ? 'bg-[#1A3329]' : 'bg-gray-300'}`}
                   />
-                  )}
+                )}
               </React.Fragment>
             ))}
           </div>
@@ -633,6 +833,7 @@ const CheckoutPage = () => {
             </div>
           )}
 
+          {/* Cancel Confirmation Modal */}
           {showCancelModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
               <div className="rounded-lg bg-white p-6 shadow-xl">
@@ -669,7 +870,10 @@ const CheckoutPage = () => {
                 <form onSubmit={handleStep1Submit} className="space-y-6">
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div>
-                      <label htmlFor="firstName" className="mb-2 block text-sm font-medium text-gray-700">
+                      <label
+                        htmlFor="firstName"
+                        className="mb-2 block text-sm font-medium text-gray-700"
+                      >
                         First Name*
                       </label>
                       <input
@@ -683,7 +887,10 @@ const CheckoutPage = () => {
                       />
                     </div>
                     <div>
-                      <label htmlFor="lastName" className="mb-2 block text-sm font-medium text-gray-700">
+                      <label
+                        htmlFor="lastName"
+                        className="mb-2 block text-sm font-medium text-gray-700"
+                      >
                         Last Name*
                       </label>
                       <input
@@ -731,7 +938,10 @@ const CheckoutPage = () => {
                     </p>
                   </div>
                   <div>
-                    <label htmlFor="address1" className="mb-1 block text-sm font-medium text-gray-700">
+                    <label
+                      htmlFor="address1"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
                       Address 1*
                     </label>
                     <input
@@ -745,7 +955,10 @@ const CheckoutPage = () => {
                     />
                   </div>
                   <div>
-                    <label htmlFor="address2" className="mb-1 block text-sm font-medium text-gray-700">
+                    <label
+                      htmlFor="address2"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
                       Address 2
                     </label>
                     <input
@@ -759,7 +972,10 @@ const CheckoutPage = () => {
                   </div>
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div className="relative">
-                      <label htmlFor="state" className="mb-1 block text-sm font-medium text-gray-700">
+                      <label
+                        htmlFor="state"
+                        className="mb-1 block text-sm font-medium text-gray-700"
+                      >
                         State*
                       </label>
                       <input
@@ -768,7 +984,7 @@ const CheckoutPage = () => {
                         value={stateSearch}
                         onChange={handleStateSearch}
                         onFocus={() => setShowStateSuggestions(true)}
-                        onBlur={() => setTimeout(() => setShowStateSuggestions(false), 200)}
+                        onBlur={() => setTimeout(() => setShowStateSuggestions(false), 300)}
                         required
                         className="w-full rounded-md border border-gray-300 px-4 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#1A3329]"
                         aria-controls="state-suggestions"
@@ -798,7 +1014,10 @@ const CheckoutPage = () => {
                       )}
                     </div>
                     <div>
-                      <label htmlFor="city" className="mb-1 block text-sm font-medium text-gray-700">
+                      <label
+                        htmlFor="city"
+                        className="mb-1 block text-sm font-medium text-gray-700"
+                      >
                         City*
                       </label>
                       <input
@@ -812,7 +1031,10 @@ const CheckoutPage = () => {
                       />
                     </div>
                     <div>
-                      <label htmlFor="pincode" className="mb-1 block text-sm font-medium text-gray-700">
+                      <label
+                        htmlFor="pincode"
+                        className="mb-1 text-sm font-medium text-gray-700"
+                      >
                         Pincode*
                       </label>
                       <input
@@ -834,7 +1056,10 @@ const CheckoutPage = () => {
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
                     <h3 className="mb-3 text-lg font-semibold text-gray-900">GST Details (Optional)</h3>
                     <div>
-                      <label htmlFor="gstNumber" className="mb-1 block text-sm font-medium text-gray-700">
+                      <label
+                        htmlFor="gstNumber"
+                        className="mb-1 block text-sm font-medium text-gray-700"
+                      >
                         GST Number
                       </label>
                       <input
@@ -921,7 +1146,11 @@ const CheckoutPage = () => {
                   <fieldset className="space-y-4">
                     <legend className="sr-only">Payment Method</legend>
                     {[
-                      { value: 'Razorpay', label: 'Razorpay', description: 'Pay using UPI, Cards, Netbanking, etc.' },
+                      {
+                        value: 'Razorpay',
+                        label: 'Razorpay',
+                        description: 'Pay using UPI, Cards, Netbanking, etc.',
+                      },
                       { value: 'COD', label: 'Cash on Delivery', description: 'Pay upon receipt' },
                     ].map((method) => (
                       <label
@@ -1021,7 +1250,7 @@ const CheckoutPage = () => {
                       onChange={(e) =>
                         handleChange({ target: { name: 'coupon.code', value: e.target.value } })
                       }
-                      className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#1A3329]"
+                      className="flex-1 text-sm rounded-md border border-gray-300 px-3 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#1A3329]"
                       aria-label="Coupon code"
                       disabled={couponLoading}
                     />
@@ -1078,9 +1307,9 @@ const CheckoutPage = () => {
           )}
 
           {step === 3 && (
-            <section className="mx-auto max-w-3xl rounded-lg bg-white p-8 shadow-md">
+            <>
               {order ? (
-                <>
+                <section className="mx-auto max-w-3xl rounded-lg bg-white p-8 shadow-md">
                   <div className="mb-8 text-center">
                     <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
                       <svg
@@ -1194,7 +1423,7 @@ const CheckoutPage = () => {
                       Continue Shopping
                     </button>
                   </div>
-                </>
+                </section>
               ) : (
                 <div className="text-center">
                   <h2 className="text-2xl font-bold text-gray-900">Order Not Found</h2>
@@ -1207,7 +1436,7 @@ const CheckoutPage = () => {
                   </button>
                 </div>
               )}
-            </section>
+            </>
           )}
         </div>
       </main>
