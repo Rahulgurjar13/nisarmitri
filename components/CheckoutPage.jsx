@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Footer from '../components/Footer'; // Adjust path as needed
 
-const getApiUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const getApiUrl = () => import.meta.env.VITE_API_URL || 'https://backendforshop.onrender.com';
 
 // Utility for API retries with exponential backoff
 const withRetry = async (fn, retries = 3, delay = 6000) => {

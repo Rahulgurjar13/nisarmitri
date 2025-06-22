@@ -3,7 +3,7 @@ import Navbar from "./Navbar";
 import Footer from "./Footer";
 import axios from "axios";
 
-const getApiUrl = () => import.meta.env.VITE_API_URL || "http://localhost:5001";
+const getApiUrl = () => import.meta.env.VITE_API_URL || "https://backendforshop.onrender.com";
 
 const Toast = ({ message, visible, onClose, type = "success" }) =>
   visible && (

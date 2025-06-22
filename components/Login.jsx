@@ -3,7 +3,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import Navbar from "./Navbar";
 
-const getApiUrl = () => import.meta.env.VITE_API_URL || "http://localhost:5001";
+const getApiUrl = () => import.meta.env.VITE_API_URL || "https://backendforshop.onrender.com";
 
 const Login = () => {
   const [email, setEmail] = useState("");

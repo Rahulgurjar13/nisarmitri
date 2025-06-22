@@ -84,7 +84,7 @@ const AdminDashboard = () => {
   const stableNavigate = useCallback((path) => navigate(path), [navigate]);
   const memoizedOrders = useMemo(() => orders, [orders]);
 
-  const getApiUrl = () => import.meta.env.VITE_API_URL || "http://localhost:5001";
+  const getApiUrl = () => import.meta.env.VITE_API_URL || "https://backendforshop.onrender.com";
 
   const fetchCsrfToken = async () => {
     try {
