@@ -95,24 +95,12 @@ const CheckoutPage = () => {
     }
   };
 
-  const fetchCsrfToken = async () => {
-    try {
-      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, { withCredentials: true });
-      localStorage.setItem('csrfToken', response.data.csrfToken);
-      return response.data.csrfToken;
-    } catch (error) {
-      console.error('Failed to fetch CSRF token:', error);
-      throw new Error('Unable to fetch CSRF token');
-    }
-  };
-
   const handleApiError = (error, operation) => {
     const status = error.response?.status;
     const message = error.response?.data?.error || `Failed to ${operation}. Please try again later.`;
     console.error(`${operation} error:`, { status, message });
 
     if (status === 401 || status === 403) {
-      if (message.includes('Invalid CSRF')) return { isCsrfError: true, message };
       setError('Session expired or unauthorized. Please log in again.');
       localStorage.removeItem('token');
       localStorage.removeItem('isAdmin');
@@ -121,7 +109,7 @@ const CheckoutPage = () => {
     } else {
       setError(message);
     }
-    return { isCsrfError: false, message };
+    return { message };
   };
 
   // Check for pending transactions and redirect if cart is empty
@@ -232,12 +220,10 @@ const CheckoutPage = () => {
   const checkPendingOrderStatus = async (orderId) => {
     try {
       setLoading(true);
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const response = await withRetry(() =>
         axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
-            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -253,32 +239,7 @@ const CheckoutPage = () => {
       }
       return pendingOrder;
     } catch (error) {
-      const { isCsrfError } = handleApiError(error, 'check pending order status');
-      if (isCsrfError) {
-        try {
-          const newCsrfToken = await fetchCsrfToken();
-          const retryResponse = await axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
-            headers: {
-              Authorization: token ? `Bearer ${token}` : undefined,
-              'X-CSRF-Token': newCsrfToken,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-            withCredentials: true,
-          });
-          const pendingOrder = retryResponse.data;
-          if (!pendingOrder || pendingOrder.paymentStatus !== 'Pending') {
-            localStorage.removeItem('pendingTransaction');
-            setPendingOrderId(null);
-            setError('Previous payment session expired or completed. Please start a new payment.');
-            return null;
-          }
-          return pendingOrder;
-        } catch (retryError) {
-          setError('Failed to check pending order status after CSRF refresh.');
-          return null;
-        }
-      }
+      handleApiError(error, 'check pending order status');
       return null;
     } finally {
       setLoading(false);
@@ -289,12 +250,10 @@ const CheckoutPage = () => {
     if (!pendingOrderId) return setError('No pending order found.');
     try {
       setLoading(true);
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       await withRetry(() =>
         axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
-            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -307,28 +266,7 @@ const CheckoutPage = () => {
       setShowCancelModal(false);
       setStep(2);
     } catch (error) {
-      const { isCsrfError } = handleApiError(error, 'cancel pending order');
-      if (isCsrfError) {
-        try {
-          const newCsrfToken = await fetchCsrfToken();
-          await axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
-            headers: {
-              Authorization: token ? `Bearer ${token}` : undefined,
-              'X-CSRF-Token': newCsrfToken,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-            withCredentials: true,
-          });
-          localStorage.removeItem('pendingTransaction');
-          setPendingOrderId(null);
-          setError('');
-          setShowCancelModal(false);
-          setStep(2);
-        } catch (retryError) {
-          setError('Failed to cancel pending order after CSRF refresh.');
-        }
-      }
+      handleApiError(error, 'cancel pending order');
     } finally {
       setLoading(false);
     }
@@ -348,7 +286,6 @@ const CheckoutPage = () => {
     });
 
     try {
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const items = cartItems.map((item) => ({
         productId: sanitizeInput(item.id),
         name: sanitizeInput(item.name),
@@ -399,7 +336,6 @@ const CheckoutPage = () => {
         axios.post(`${getApiUrl()}/api/orders`, orderData, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
-            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -419,7 +355,6 @@ const CheckoutPage = () => {
             {
               headers: {
                 Authorization: token ? `Bearer ${token}` : undefined,
-                'X-CSRF-Token': csrfToken,
                 'Content-Type': 'application/json',
               },
               timeout: 15000,
@@ -446,36 +381,10 @@ const CheckoutPage = () => {
         setStep(3);
       }
     } catch (error) {
-      const { isCsrfError } = handleApiError(error, 'process order');
-      if (isCsrfError) {
-        try {
-          const newCsrfToken = await fetchCsrfToken();
-          const retryResponse = await axios.post(`${getApiUrl()}/api/orders`, orderData, {
-            headers: {
-              Authorization: token ? `Bearer ${token}` : undefined,
-              'X-CSRF-Token': newCsrfToken,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-            withCredentials: true,
-          });
-          const { order } = retryResponse.data;
-          if (formData.paymentMethod === 'COD') {
-            setOrder(order);
-            localStorage.removeItem('pendingTransaction');
-            localStorage.removeItem('cart');
-            setPendingOrderId(null);
-            setStep(3);
-          } else {
-            setError('Razorpay retry after CSRF refresh not implemented.');
-          }
-        } catch (retryError) {
-          setError('Failed to process order after CSRF refresh.');
-        }
-      } else if (error.message.includes('duplicate key')) {
+      if (error.message.includes('duplicate key')) {
         setError('Order ID already exists. Please try again.');
       } else {
-        setError(error.response?.data?.error || 'Failed to process order. Please try again.');
+        handleApiError(error, 'process order');
       }
     } finally {
       setLoading(false);
@@ -512,7 +421,6 @@ const CheckoutPage = () => {
 
         try {
           setLoading(true);
-          let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
           console.log('Verifying payment for order:', orderData.orderId);
 
           const verifyResponse = await withRetry(() =>
@@ -527,14 +435,13 @@ const CheckoutPage = () => {
               {
                 headers: {
                   Authorization: token ? `Bearer ${token}` : undefined,
-                  'X-CSRF-Token': csrfToken,
                   'Content-Type': 'application/json',
                 },
                 timeout: 10000,
                 withCredentials: true,
               }
-            ) 
-          ); 
+            )
+          );
 
           console.log('Verification response:', verifyResponse.data);
 
@@ -552,58 +459,18 @@ const CheckoutPage = () => {
           }
         } catch (error) {
           console.error('Payment verification error:', error.message, error.stack);
-          const { isCsrfError } = handleApiError(error, 'verify payment');
-          if (isCsrfError) {
-            try {
-              const newCsrfToken = await fetchCsrfToken();
-              const retryResponse = await axios.post(
-                `${getApiUrl()}/api/orders/verify-razorpay-payment`,
-                {
-                  orderId: orderData.orderId,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_signature: response.razorpay_signature,
-                },
-                {
-                  headers: {
-                    Authorization: token ? `Bearer ${token}` : undefined,
-                    'X-CSRF-Token': newCsrfToken,
-                    'Content-Type': 'application/json',
-                  },
-                  timeout: 10000,
-                  withCredentials: true,
-                }
-              );
-              if (retryResponse.data.success) {
-                console.log('Payment verified successfully after CSRF retry:', orderData.orderId);
-                setOrder(retryResponse.data.order || order);
-                localStorage.removeItem('pendingTransaction');
-                localStorage.removeItem('cart');
-                setPendingOrderId(null);
-                setStep(3);
-              } else {
-                console.error('Payment verification failed after CSRF retry:', retryResponse.data.message);
-                setError('Payment verification failed after CSRF refresh. Please retry or contact support.');
-                setStep(2);
-              }
-            } catch (retryError) {
-              console.error('Payment verification retry error:', retryError.message, retryError.stack);
-              setError('Failed to verify payment after CSRF refresh. Please retry or contact support.');
-              setStep(2);
-            }
-          } else {
-            const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
-            setError(
-              pendingOrder
-                ? 'Payment verification failed. Your order is pending. Please retry or cancel.'
-                : 'Order session expired. Please start a new order.'
-            );
-            if (!pendingOrder) {
-              localStorage.removeItem('pendingTransaction');
-              setPendingOrderId(null);
-            }
-            setStep(2);
+          handleApiError(error, 'verify payment');
+          const pendingOrder = await checkPendingOrderStatus(orderData.orderId);
+          setError(
+            pendingOrder
+              ? 'Payment verification failed. Your order is pending. Please retry or cancel.'
+              : 'Order session expired. Please start a new order.'
+          );
+          if (!pendingOrder) {
+            localStorage.removeItem('pendingTransaction');
+            setPendingOrderId(null);
           }
+          setStep(2);
         } finally {
           setLoading(false);
         }
@@ -651,7 +518,6 @@ const CheckoutPage = () => {
     setError('');
 
     try {
-      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const razorpayResponse = await withRetry(() =>
         axios.post(
           `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
@@ -659,7 +525,6 @@ const CheckoutPage = () => {
           {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
-              'X-CSRF-Token': csrfToken,
               'Content-Type': 'application/json',
             },
             timeout: 15000,
@@ -678,10 +543,7 @@ const CheckoutPage = () => {
 
       initiateRazorpayPayment(razorpayOrderId, keyId, orderData, pendingOrder.total, pendingOrder);
     } catch (error) {
-      const { isCsrfError } = handleApiError(error, 'retry payment');
-      if (isCsrfError) {
-        setError('Failed to retry payment after CSRF refresh.');
-      }
+      handleApiError(error, 'retry payment');
     } finally {
       setLoading(false);
     }
