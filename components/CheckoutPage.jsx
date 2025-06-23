@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -64,7 +65,7 @@ const CheckoutPage = () => {
   const calculateShippingCost = (subtotal) => {
     if (subtotal >= 800) return 0;
     if (subtotal >= 500) return 50;
-    return 80;
+    return 80; // Updated default shipping cost to match initial formData
   };
 
   // Update shipping cost and coupon discount
@@ -98,9 +99,8 @@ const CheckoutPage = () => {
   const fetchCsrfToken = async () => {
     try {
       const response = await axios.get(`${getApiUrl()}/api/csrf-token`, { withCredentials: true });
-      const csrfToken = response.data.csrfToken;
-      localStorage.setItem('csrfToken', csrfToken);
-      return csrfToken;
+      localStorage.setItem('csrfToken', response.data.csrfToken);
+      return response.data.csrfToken;
     } catch (error) {
       console.error('Failed to fetch CSRF token:', error);
       throw new Error('Unable to fetch CSRF token');
@@ -233,14 +233,14 @@ const CheckoutPage = () => {
   const checkPendingOrderStatus = async (orderId) => {
     try {
       setLoading(true);
-      const csrfToken = await fetchCsrfToken();
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const response = await withRetry(() =>
         axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
-          data: { csrf_token: csrfToken }, // Include CSRF token in body
           timeout: 10000,
           withCredentials: true,
         })
@@ -261,9 +261,9 @@ const CheckoutPage = () => {
           const retryResponse = await axios.get(`${getApiUrl()}/api/orders/pending/${orderId}`, {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
               'Content-Type': 'application/json',
             },
-            data: { csrf_token: newCsrfToken },
             timeout: 10000,
             withCredentials: true,
           });
@@ -290,14 +290,14 @@ const CheckoutPage = () => {
     if (!pendingOrderId) return setError('No pending order found.');
     try {
       setLoading(true);
-      const csrfToken = await fetchCsrfToken();
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       await withRetry(() =>
         axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
-          data: { csrf_token: csrfToken }, // Include CSRF token in body
           timeout: 10000,
           withCredentials: true,
         })
@@ -315,9 +315,9 @@ const CheckoutPage = () => {
           await axios.delete(`${getApiUrl()}/api/orders/${pendingOrderId}`, {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
               'Content-Type': 'application/json',
             },
-            data: { csrf_token: newCsrfToken },
             timeout: 10000,
             withCredentials: true,
           });
@@ -349,7 +349,7 @@ const CheckoutPage = () => {
     });
 
     try {
-      const csrfToken = await fetchCsrfToken();
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const items = cartItems.map((item) => ({
         productId: sanitizeInput(item.id),
         name: sanitizeInput(item.name),
@@ -389,7 +389,6 @@ const CheckoutPage = () => {
         total,
         paymentMethod: sanitizeInput(formData.paymentMethod),
         paymentStatus: formData.paymentMethod === 'COD' ? 'Paid' : 'Pending',
-        csrf_token: csrfToken, // Include CSRF token in body
       };
 
       if (formData.paymentMethod === 'Razorpay' && pendingOrderId) {
@@ -401,6 +400,7 @@ const CheckoutPage = () => {
         axios.post(`${getApiUrl()}/api/orders`, orderData, {
           headers: {
             Authorization: token ? `Bearer ${token}` : undefined,
+            'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -416,10 +416,11 @@ const CheckoutPage = () => {
         const razorpayResponse = await withRetry(() =>
           axios.post(
             `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
-            { orderId: order.orderId, csrf_token: csrfToken }, // Include CSRF token in body
+            { orderId: order.orderId },
             {
               headers: {
                 Authorization: token ? `Bearer ${token}` : undefined,
+                'X-CSRF-Token': csrfToken,
                 'Content-Type': 'application/json',
               },
               timeout: 15000,
@@ -450,10 +451,10 @@ const CheckoutPage = () => {
       if (isCsrfError) {
         try {
           const newCsrfToken = await fetchCsrfToken();
-          const retryOrderData = { ...orderData, csrf_token: newCsrfToken };
-          const retryResponse = await axios.post(`${getApiUrl()}/api/orders`, retryOrderData, {
+          const retryResponse = await axios.post(`${getApiUrl()}/api/orders`, orderData, {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': newCsrfToken,
               'Content-Type': 'application/json',
             },
             timeout: 10000,
@@ -467,26 +468,7 @@ const CheckoutPage = () => {
             setPendingOrderId(null);
             setStep(3);
           } else {
-            const razorpayResponse = await axios.post(
-              `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
-              { orderId: order.orderId, csrf_token: newCsrfToken },
-              {
-                headers: {
-                  Authorization: token ? `Bearer ${token}` : undefined,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 15000,
-                withCredentials: true,
-              }
-            );
-            const { razorpayOrderId, keyId, orderData: responseOrderData } = razorpayResponse.data;
-            if (!razorpayOrderId || !keyId) throw new Error('Invalid Razorpay response');
-            localStorage.setItem(
-              'pendingTransaction',
-              JSON.stringify({ orderId: order.orderId, razorpayOrderId, timestamp: Date.now() })
-            );
-            setPendingOrderId(order.orderId);
-            initiateRazorpayPayment(razorpayOrderId, keyId, responseOrderData, total, order);
+            setError('Razorpay retry after CSRF refresh not implemented.');
           }
         } catch (retryError) {
           setError('Failed to process order after CSRF refresh.');
@@ -531,7 +513,7 @@ const CheckoutPage = () => {
 
         try {
           setLoading(true);
-          const csrfToken = await fetchCsrfToken();
+          let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
           console.log('Verifying payment for order:', orderData.orderId);
 
           const verifyResponse = await withRetry(() =>
@@ -542,18 +524,18 @@ const CheckoutPage = () => {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
-                csrf_token: csrfToken, // Include CSRF token in body
               },
               {
                 headers: {
                   Authorization: token ? `Bearer ${token}` : undefined,
+                  'X-CSRF-Token': csrfToken,
                   'Content-Type': 'application/json',
                 },
                 timeout: 10000,
                 withCredentials: true,
               }
-            )
-          );
+            ) 
+          ); 
 
           console.log('Verification response:', verifyResponse.data);
 
@@ -582,11 +564,11 @@ const CheckoutPage = () => {
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
-                  csrf_token: newCsrfToken,
                 },
                 {
                   headers: {
                     Authorization: token ? `Bearer ${token}` : undefined,
+                    'X-CSRF-Token': newCsrfToken,
                     'Content-Type': 'application/json',
                   },
                   timeout: 10000,
@@ -670,14 +652,15 @@ const CheckoutPage = () => {
     setError('');
 
     try {
-      const csrfToken = await fetchCsrfToken();
+      let csrfToken = localStorage.getItem('csrfToken') || await fetchCsrfToken();
       const razorpayResponse = await withRetry(() =>
         axios.post(
           `${getApiUrl()}/api/orders/initiate-razorpay-payment`,
-          { orderId: pendingOrderId, csrf_token: csrfToken }, // Include CSRF token in body
+          { orderId: pendingOrderId },
           {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
+              'X-CSRF-Token': csrfToken,
               'Content-Type': 'application/json',
             },
             timeout: 15000,
@@ -766,6 +749,7 @@ const CheckoutPage = () => {
     state.toLowerCase().includes(stateSearch.toLowerCase())
   );
 
+  // Removed PaymentCallback component as verification is now handled in handler
   return (
     <div className="min-h-screen bg-gray-50 font-serif">
       <header className="bg-[#1A3329] p-4 text-white shadow-md">
