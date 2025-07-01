@@ -10,30 +10,38 @@ import "react-toastify/dist/ReactToastify.css";
 
 const OrderRow = ({ order, onViewDetails }) => {
   const formatDate = (dateString) => {
-    if (!dateString) return "N/A"; // Handle missing date
+    if (!dateString) return "N/A";
     const date = new Date(dateString);
-    return isNaN(date) ? "Invalid Date" : date.toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    return isNaN(date)
+      ? "Invalid Date"
+      : date.toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
   };
 
   return (
     <tr className="border-b hover:bg-gray-50 transition-colors duration-200">
-      <td className="py-4 px-6 text-gray-900 font-medium">{order.orderId}</td>
-      <td className="py-4 px-6 text-gray-600">
+      <td className="py-2 px-3 sm:px-4 md:px-6 text-gray-900 font-medium text-sm sm:text-base">
+        {order.orderId}
+      </td>
+      <td className="py-2 px-3 sm:px-4 md:px-6 text-gray-600 text-sm sm:text-base">
         {order.customer.firstName} {order.customer.lastName}
       </td>
-      <td className="py-4 px-6 text-gray-600">{formatDate(order.createdAt || order.date)}</td> {/* Use createdAt or fallback to date */}
-      <td className="py-4 px-6 text-gray-600">
+      <td className="py-2 px-3 sm:px-4 md:px-6 text-gray-600 text-sm sm:text-base">
+        {formatDate(order.createdAt || order.date)}
+      </td>
+      <td className="py-2 px-3 sm:px-4 md:px-6 text-gray-600 text-sm sm:text-base">
         ₹{order.total.toLocaleString("en-IN")}
       </td>
-      <td className="py-4 px-6 text-gray-600">{order.paymentMethod}</td>
-      <td className="py-4 px-6">
+      <td className="py-2 px-3 sm:px-4 md:px-6 text-gray-600 text-sm sm:text-base">
+        {order.paymentMethod}
+      </td>
+      <td className="py-2 px-3 sm:px-4 md:px-6">
         <button
           onClick={() => onViewDetails(order)}
-          className="text-[#1A3329] hover:text-[#2F6844] font-medium"
+          className="text-[#1A3329] hover:text-[#2F6844] font-medium text-sm sm:text-base"
         >
           View Details
         </button>
@@ -43,9 +51,9 @@ const OrderRow = ({ order, onViewDetails }) => {
 };
 
 const EmptyState = ({ message }) => (
-  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+  <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
     <svg
-      className="w-16 h-16 text-gray-400 mb-4"
+      className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mb-4"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -57,7 +65,7 @@ const EmptyState = ({ message }) => (
         d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1M19 20a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0h4"
       />
     </svg>
-    <h3 className="text-xl font-medium text-gray-900 mb-2">{message}</h3>
+    <h3 className="text-lg sm:text-xl font-medium text-gray-900 mb-2">{message}</h3>
   </div>
 );
 
@@ -118,11 +126,11 @@ const AdminDashboard = () => {
 
   const applyFilters = useCallback(
     (ordersToFilter) => {
-      let filtered = ordersToFilter.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+      let filtered = ordersToFilter.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus));
       if (filterDate && filterDate !== new Date().toISOString().split("T")[0]) {
         filtered = filtered.filter(
           (order) => {
-            const orderDate = order.createdAt || order.date; // Use createdAt or fallback to date
+            const orderDate = order.createdAt || order.date;
             return orderDate && new Date(orderDate).toISOString().split("T")[0] === filterDate;
           }
         );
@@ -158,7 +166,7 @@ const AdminDashboard = () => {
           })
         );
 
-        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus));
         setOrders(paidOrders);
         setFilteredOrders(applyFilters(paidOrders));
         setError(null);
@@ -200,7 +208,7 @@ const AdminDashboard = () => {
 
           if (data.event === "newOrder" || data.event === "orderUpdated") {
             const order = data.order;
-            if (['Success', 'Paid'].includes(order.paymentStatus)) { // Include both Success and Paid
+            if (['Success', 'Paid'].includes(order.paymentStatus)) {
               setOrders((prevOrders) => {
                 const orderExists = prevOrders.some((o) => o.orderId === order.orderId);
                 const updatedOrders = orderExists
@@ -296,7 +304,7 @@ const AdminDashboard = () => {
           })
         );
 
-        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus));
         setFilteredOrders(paidOrders);
         lastFilterParams.current = params;
         if (paidOrders.length === 0) {
@@ -340,7 +348,7 @@ const AdminDashboard = () => {
           })
         );
 
-        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus)); // Include both Success and Paid
+        const paidOrders = response.data.filter((order) => ['Success', 'Paid'].includes(order.paymentStatus));
         setFilteredOrders(paidOrders);
         if (paidOrders.length === 0) {
           toast.info("No successful orders found for the provided Order ID.");
@@ -415,7 +423,7 @@ const AdminDashboard = () => {
       doc.setFontSize(18);
       doc.text(`Invoice: ${order.orderId || "N/A"}`, 14, 20);
       doc.setFontSize(10);
-      doc.text(`Date: ${new Date(order.createdAt || order.date).toLocaleDateString("en-IN")}`, 14, 28); // Use createdAt or fallback to date
+      doc.text(`Date: ${new Date(order.createdAt || order.date).toLocaleDateString("en-IN")}`, 14, 28);
 
       doc.setFontSize(12);
       doc.text("Customer Information", 14, 40);
@@ -495,7 +503,7 @@ const AdminDashboard = () => {
       const paymentBody = [["Payment Method", order.paymentMethod || "N/A"]];
       if (order.paymentMethod !== "COD") {
         paymentBody.push(
-          ["Payment ID", order.razorpayPaymentId || "N/A"], // Use razorpayPaymentId
+          ["Payment ID", order.razorpayPaymentId || "N/A"],
           ["Razorpay Order ID", order.razorpayOrderId || "N/A"],
           ["Status", order.paymentStatus || "N/A"]
         );
@@ -521,14 +529,14 @@ const AdminDashboard = () => {
   return (
     <div className="bg-gray-50 min-h-screen font-serif">
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4 md:mb-0">
+      <div className="container mx-auto px-2 sm:px-4 py-6">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 sm:mb-6 gap-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Admin Dashboard - Orders
           </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
             <span
-              className={`text-sm ${
+              className={`text-xs sm:text-sm ${
                 sseConnected ? "text-green-600" : "text-red-600"
               }`}
             >
@@ -536,7 +544,7 @@ const AdminDashboard = () => {
             </span>
             <button
               onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-md transition-colors duration-300"
+              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 sm:px-5 sm:py-2 rounded-md transition-colors duration-300 text-sm sm:text-base"
               disabled={loading}
             >
               Logout
@@ -546,26 +554,26 @@ const AdminDashboard = () => {
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {loading ? (
-            <div className="animate-pulse p-6">
+            <div className="animate-pulse p-4 sm:p-6">
               <div className="space-y-4">
                 {[1, 2, 3, 4].map((idx) => (
-                  <div key={idx} className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gray-300 rounded"></div>
+                  <div key={idx} className="flex items-center space-x-2 sm:space-x-4">
+                    <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gray-300 rounded"></div>
                     <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-300 rounded w-1/3"></div>
-                      <div className="h-4 bg-gray-300 rounded w-2/3"></div>
+                      <div className="h-3 sm:h-4 bg-gray-300 rounded w-1/3"></div>
+                      <div className="h-3 sm:h-4 bg-gray-300 rounded w-2/3"></div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           ) : error ? (
-            <div className="p-6 text-red-600 flex justify-between items-center">
-              {error}
+            <div className="p-4 sm:p-6 text-red-600 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+              <span className="text-sm sm:text-base">{error}</span>
               {error.includes("log in") && (
                 <button
                   onClick={() => stableNavigate("/login")}
-                  className="text-[#1A3329] hover:text-[#2F6844] font-medium"
+                  className="text-[#1A3329] hover:text-[#2F6844] font-medium text-sm sm:text-base"
                   disabled={loading}
                 >
                   Go to Login
@@ -576,12 +584,12 @@ const AdminDashboard = () => {
             <>
               {!selectedOrder ? (
                 <>
-                  <div className="p-6 flex flex-col md:flex-row gap-4 mb-4">
-                    <div className="flex flex-col md:flex-row gap-4 items-end">
-                      <div className="flex flex-col">
+                  <div className="p-4 sm:p-6 flex flex-col gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[150px]">
                         <label
                           htmlFor="searchOrderId"
-                          className="text-sm font-medium text-gray-700 mb-1"
+                          className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block"
                         >
                           Order ID
                         </label>
@@ -591,23 +599,23 @@ const AdminDashboard = () => {
                           value={searchOrderId}
                           onChange={(e) => setSearchOrderId(e.target.value)}
                           placeholder="Enter Order ID"
-                          className="border border-gray-300 rounded-md p-2"
+                          className="border border-gray-300 rounded-md p-2 w-full text-sm sm:text-base"
                           disabled={isSearching || loading}
                         />
                       </div>
                       <button
                         onClick={handleSearchClick}
-                        className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
+                        className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base"
                         disabled={isSearching || loading}
                       >
                         Search
                       </button>
                     </div>
-                    <div className="flex flex-col md:flex-row gap-4 items-end">
-                      <div className="flex flex-col">
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[150px]">
                         <label
                           htmlFor="filterDate"
-                          className="text-sm font-medium text-gray-700 mb-1"
+                          className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block"
                         >
                           Filter by Date
                         </label>
@@ -616,13 +624,13 @@ const AdminDashboard = () => {
                           id="filterDate"
                           value={filterDate}
                           onChange={(e) => setFilterDate(e.target.value)}
-                          className="border border-gray-300 rounded-md p-2"
+                          className="border border-gray-300 rounded-md p-2 w-full text-sm sm:text-base"
                           disabled={isFiltering || loading}
                         />
                       </div>
                       <button
                         onClick={() => debouncedHandleFilterOrders({ date: filterDate })}
-                        className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md"
+                        className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base"
                         disabled={isFilterButtonDisabled}
                       >
                         Filter Orders
@@ -630,14 +638,14 @@ const AdminDashboard = () => {
                     </div>
                     <button
                       onClick={clearFilters}
-                      className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md self-end mt-4 md:mt-0"
+                      className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm sm:text-base self-start"
                       disabled={isFiltering || isSearching || loading}
                     >
                       Clear Filters
                     </button>
                   </div>
                   {(isFiltering || isSearching) && (
-                    <div className="p-6 text-center">
+                    <div className="p-4 sm:p-6 text-center">
                       <svg
                         className="animate-spin h-5 w-5 text-[#1A3329] mx-auto"
                         xmlns="http://www.w3.org/2000/svg"
@@ -658,52 +666,68 @@ const AdminDashboard = () => {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         />
                       </svg>
-                      <p>{isFiltering ? "Filtering orders..." : "Searching orders..."}</p>
+                      <p className="text-sm sm:text-base">
+                        {isFiltering ? "Filtering orders..." : "Searching orders..."}
+                      </p>
                     </div>
                   )}
                   {filteredOrders.length > 0 ? (
-                    <table className="min-w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Order ID</th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Customer</th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Date</th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Total</th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Payment Method</th>
-                          <th className="py-3 px-6 text-left text-sm font-semibold text-gray-900">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredOrders.map((order) => (
-                          <OrderRow
-                            key={order.orderId}
-                            order={order}
-                            onViewDetails={handleViewOrderDetails}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full table-auto">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="py-2 px-3 sm:px-4 md:px-6 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                              Order ID
+                            </th>
+                            <th className="py-2 px-3 sm:px-4 md:px-6 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                              Customer
+                            </th>
+                            <th className="py-2 px-3 sm:px-4 md:px-6 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                              Date
+                            </th>
+                            <th className="py-2 px-3 sm:px-4 md:px-6 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                              Total
+                            </th>
+                            <th className="py-2 px-3 sm:px-4 md:px-6 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                              Payment
+                            </th>
+                            <th className="py-2 px-3 sm:px-4 md:px-6 text-left text-xs sm:text-sm font-semibold text-gray-900">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredOrders.map((order) => (
+                            <OrderRow
+                              key={order.orderId}
+                              order={order}
+                              onViewDetails={handleViewOrderDetails}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <EmptyState message="No Orders Found for Selected Filters or Search" />
                   )}
                 </>
               ) : (
-                <div className="p-6">
-                  <div className="flex justify-between items-center mb-4">
+                <div className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
                     <button
                       onClick={() => setSelectedOrder(null)}
-                      className="text-[#1A3329] hover:text-[#2F6844]"
+                      className="text-[#1A3329] hover:text-[#2F6844] text-sm sm:text-base"
                       disabled={loading}
                     >
                       ← Back to Orders
                     </button>
                     <button
                       onClick={() => downloadOrderPDF(selectedOrder)}
-                      className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-4 py-2 rounded-md transition-colors duration-300 flex items-center"
+                      className="bg-[#1A3329] hover:bg-[#2F6844] text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-md transition-colors duration-300 flex items-center text-sm sm:text-base"
                       disabled={loading}
                     >
                       <svg
-                        className="h-5 w-5 mr-2"
+                        className="h-4 w-4 sm:h-5 sm:w-5 mr-2"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -718,45 +742,55 @@ const AdminDashboard = () => {
                       Download PDF
                     </button>
                   </div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
                     Order Details: {selectedOrder.orderId}
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Information</h3>
-                      <p>{`${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName}`}</p>
-                      <p>{selectedOrder.customer.email}</p>
-                      <p>{selectedOrder.customer.phone}</p>
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+                        Customer Information
+                      </h3>
+                      <p className="text-sm sm:text-base">{`${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName}`}</p>
+                      <p className="text-sm sm:text-base">{selectedOrder.customer.email}</p>
+                      <p className="text-sm sm:text-base">{selectedOrder.customer.phone}</p>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Shipping Details</h3>
-                      <p>{selectedOrder.shippingAddress.address1}</p>
-                      {selectedOrder.shippingAddress.address2 && <p>{selectedOrder.shippingAddress.address2}</p>}
-                      <p>{`${selectedOrder.shippingAddress.city}, ${selectedOrder.shippingAddress.state} - ${selectedOrder.shippingAddress.pincode}`}</p>
-                      <p>Shipping Method: {selectedOrder.shippingMethod?.type || "N/A"}</p>
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+                        Shipping Details
+                      </h3>
+                      <p className="text-sm sm:text-base">{selectedOrder.shippingAddress.address1}</p>
+                      {selectedOrder.shippingAddress.address2 && (
+                        <p className="text-sm sm:text-base">{selectedOrder.shippingAddress.address2}</p>
+                      )}
+                      <p className="text-sm sm:text-base">{`${selectedOrder.shippingAddress.city}, ${selectedOrder.shippingAddress.state} - ${selectedOrder.shippingAddress.pincode}`}</p>
+                      <p className="text-sm sm:text-base">Shipping Method: {selectedOrder.shippingMethod?.type || "N/A"}</p>
                     </div>
                   </div>
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Items Purchased</h3>
+                  <div className="mt-4 sm:mt-6">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+                      Items Purchased
+                    </h3>
                     {selectedOrder.items.map((item, index) => (
-                      <div key={index} className="flex justify-between py-2 border-b">
+                      <div key={index} className="flex justify-between py-2 border-b text-sm sm:text-base">
                         <span>{item.name} (x{item.quantity})</span>
                         <span>₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between font-bold mt-4">
+                    <div className="flex justify-between font-bold mt-4 text-sm sm:text-base">
                       <span>Total</span>
                       <span>₹{selectedOrder.total.toLocaleString("en-IN")}</span>
                     </div>
                   </div>
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Information</h3>
-                    <p>Payment Method: {selectedOrder.paymentMethod}</p>
+                  <div className="mt-4 sm:mt-6">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+                      Payment Information
+                    </h3>
+                    <p className="text-sm sm:text-base">Payment Method: {selectedOrder.paymentMethod}</p>
                     {selectedOrder.paymentMethod !== "COD" && (
                       <>
-                        <p>Payment ID: {selectedOrder.razorpayPaymentId || "N/A"}</p>
-                        <p>Razorpay Order ID: {selectedOrder.razorpayOrderId || "N/A"}</p>
-                        <p>Status: {selectedOrder.paymentStatus || "N/A"}</p>
+                        <p className="text-sm sm:text-base">Payment ID: {selectedOrder.razorpayPaymentId || "N/A"}</p>
+                        <p className="text-sm sm:text-base">Razorpay Order ID: {selectedOrder.razorpayOrderId || "N/A"}</p>
+                        <p className="text-sm sm:text-base">Status: {selectedOrder.paymentStatus || "N/A"}</p>
                       </>
                     )}
                   </div>
