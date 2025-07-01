@@ -265,19 +265,6 @@ const ContactPage = () => {
     setToast({ message: "", visible: false, type: toast.type });
   }, [toast.type]);
 
-  const fetchCsrfToken = async () => {
-    try {
-      const response = await axios.get(`${getApiUrl()}/api/csrf-token`, {
-        withCredentials: true,
-      });
-      localStorage.setItem("csrfToken", response.data.csrfToken);
-      return response.data.csrfToken;
-    } catch (error) {
-      console.error("Failed to fetch CSRF token:", error);
-      throw new Error("Unable to fetch CSRF token");
-    }
-  };
-
   const handleApiError = (error, operation) => {
     const status = error.response?.status;
     const message =
@@ -294,9 +281,9 @@ const ContactPage = () => {
       localStorage.removeItem("isAdmin");
       localStorage.removeItem("userName");
       setTimeout(handleCloseToast, 5000);
-      return { isCsrfError: message.includes("Invalid CSRF"), message };
+      return { message };
     }
-    return { isCsrfError: false, message };
+    return { message };
   };
 
   const handleInputChange = (e) => {
@@ -346,7 +333,6 @@ const ContactPage = () => {
     if (validateForm()) {
       setLoading(true);
       try {
-        let csrfToken = localStorage.getItem("csrfToken") || await fetchCsrfToken();
         const response = await axios.post(
           `${getApiUrl()}/api/contact`,
           formData,
@@ -354,7 +340,6 @@ const ContactPage = () => {
             headers: {
               Authorization: token ? `Bearer ${token}` : undefined,
               "Content-Type": "application/json",
-              "X-CSRF-Token": csrfToken,
             },
             withCredentials: true,
           }
@@ -378,49 +363,9 @@ const ContactPage = () => {
         });
         setErrors({});
       } catch (error) {
-        const { isCsrfError, message } = handleApiError(error, "submit contact form");
+        const { message } = handleApiError(error, "submit contact form");
         setToast({ message, visible: true, type: "error" });
         setTimeout(handleCloseToast, 5000);
-        if (isCsrfError) {
-          try {
-            const newCsrfToken = await fetchCsrfToken();
-            const retryResponse = await axios.post(
-              `${getApiUrl()}/api/contact`,
-              formData,
-              {
-                headers: {
-                  Authorization: token ? `Bearer ${token}` : undefined,
-                  "Content-Type": "application/json",
-                  "X-CSRF-Token": newCsrfToken,
-                },
-                withCredentials: true,
-              }
-            );
-            setFormSubmitted(true);
-            setToast({
-              message:
-                retryResponse.data.message ||
-                "Your message has been sent successfully!",
-              visible: true,
-              type: "success",
-            });
-            setTimeout(handleCloseToast, 5000);
-            setFormData({
-              name: "",
-              email: "",
-              phone: "",
-              subject: "",
-              message: "",
-            });
-            setErrors({});
-          } catch (retryError) {
-            const retryMessage =
-              retryError.response?.data?.error ||
-              "Failed to send message after CSRF refresh.";
-            setToast({ message: retryMessage, visible: true, type: "error" });
-            setTimeout(handleCloseToast, 5000);
-          }
-        }
         setErrors(error.response?.data?.errors || {});
       } finally {
         setLoading(false);
