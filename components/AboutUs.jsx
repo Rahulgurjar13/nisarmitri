@@ -122,29 +122,7 @@ const VideoSelectionItem = ({ video, isActive, onClick }) => (
   </div>
 );
 
-// Project component
-const Project = ({ image, title, category, description }) => (
-  <div className="rounded-xl overflow-hidden shadow-md bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-lg group">
-    <div className="relative aspect-video bg-gray-100 overflow-hidden">
-      <img 
-        src={image} 
-        alt={title} 
-        className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105" 
-        onError={(e) => { e.target.src = 'https://via.placeholder.com/640x360?text=Project+Image'; }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#1D3B30] to-transparent opacity-0 group-hover:opacity-70 transition-opacity duration-300"></div>
-      <div className="absolute top-2 left-2 bg-[#1D3B30] text-white px-2 py-1 rounded-md text-xs font-medium shadow-md">{category}</div>
-    </div>
-    <div className="p-3 sm:p-4">
-      <h3 className="text-sm sm:text-base md:text-lg font-bold text-[#1D3B30] mb-1">{title}</h3>
-      <p className="text-xs sm:text-sm text-gray-700 mb-2 line-clamp-2">{description}</p>
-      <a href="#" className="inline-flex items-center text-[#2A5446] text-xs sm:text-sm font-medium transition-all duration-300 hover:translate-x-1">
-        Learn more
-        <ChevronRight size={12} className="ml-1" />
-      </a>
-    </div>
-  </div>
-);
+
 
 // Section Heading component
 const SectionHeading = ({ title, description }) => (
@@ -241,7 +219,7 @@ const AboutPage = () => {
   ];
 
   const founder = {
-    name: "Seema Srivastav",
+    name: "Dr. Seema Srivastava",
     role: "Founder & Environmental Specialist",
     bio: "With over 10 years of experience in environmental conservation, Seema founded Nisargmaitri with the vision of creating a sustainable future. Her passion for eco-friendly living and community empowerment drives the organization's mission.",
     image: "/seema mam new.png", // Use relative path for public folder
@@ -314,7 +292,7 @@ const AboutPage = () => {
     { id: "vision", label: "Vision" },
     { id: "founder", label: "Founder" },
     { id: "videos", label: "Videos" },
-    { id: "projects", label: "Projects" }
+  
   ];
 
   return (
@@ -539,35 +517,7 @@ const AboutPage = () => {
           </div>
         </section>
 
-        {/* Projects Section */}
-        <section id="projects" className="py-6 sm:py-8 md:py-12 bg-white">
-          <div className="container mx-auto px-4 sm:px-6">
-            <SectionHeading 
-              title="Our Projects" 
-              description="Discover the impactful projects we've undertaken to promote environmental sustainability and community wellbeing."
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 max-w-6xl mx-auto">
-              {projects.map((project, index) => (
-                <Project
-                  key={index}
-                  image={project.image}
-                  title={project.title}
-                  category={project.category}
-                  description={project.description}
-                />
-              ))}
-            </div>
-            <div className="text-center mt-6 sm:mt-8">
-              <a 
-                href="/projects" 
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#1D3B30] hover:bg-[#2A5446] transition-colors duration-300"
-              >
-                Explore All Projects
-                <ChevronRight size={14} className="ml-2" />
-              </a>
-            </div>
-          </div>
-        </section>
+       
 
        
 
