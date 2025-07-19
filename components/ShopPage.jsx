@@ -230,7 +230,7 @@ const ShopPage = () => {
         id: 1,
         name: 'Bamboo Toothbrush',
         description: 'Eco-friendly bamboo toothbrush with soft bristles, perfect for everyday use.',
-        price: 1,
+        price: 40,
         image: '/toothbrush.png',
         category: 'Bamboo',
         tag: 'Bestseller'
@@ -263,7 +263,7 @@ const ShopPage = () => {
       {
         id: 5,
         name: 'Bamboo Straws (each of 40)',
-        description: 'Reusable bamboo drinking straws with cleaning brush included.',
+        description: 'Reusable bamboo drinking straws.',
         price: 40,
         image: '/BAmboo (1).png',
         category: 'Bamboo'
@@ -271,7 +271,7 @@ const ShopPage = () => {
       {
         id: 6,
         name: 'Collapsible Steel Cup',
-        description: 'Double-walled stainless steel tumbler for hot and cold beverages.',
+        description: 'stainless steel tumbler for hot and cold beverages.',
         price: 199,
         image: '/tumbler.png',
         category: 'Steel'
