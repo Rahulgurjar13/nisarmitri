@@ -271,7 +271,7 @@ const ShopPage = () => {
       {
         id: 6,
         name: 'Collapsible Steel Cup',
-        description: 'stainless steel tumbler for hot and cold beverages.',
+        description: 'Stainless steel Portable cup (75 ml) for hot and cold beverages . ',
         price: 199,
         image: '/tumbler.png',
         category: 'Steel'
@@ -279,8 +279,8 @@ const ShopPage = () => {
       {
         id: 7,
         name: 'Reusable Makeup Remover Pads(each of 70 rs)',
-        description: 'Soft cotton reusable makeup remover pads with washing bag .',
-        price: 70 ,
+        description: 'Reusable makeup remover pads .',
+        price: 69 ,
         image: '/makeupremove.jpeg',
         category: 'Zero Waste'
       },
@@ -288,7 +288,7 @@ const ShopPage = () => {
         id: 8,
         name: 'Steel Water Bottle',
         description: 'Stainless steel water bottle with leak-proof lid, 750ml capacity.',
-        price: 250,
+        price: 199,
         image: '/Untitled design (35).png',
         category: 'Steel',
         tag: 'New'
@@ -296,8 +296,8 @@ const ShopPage = () => {
       {
         id: 9,
         name: 'Handmade Customized Muffler',
-        description: 'Handcrafted muffler made from recycled cotton, can be customized.',
-        price: 499,
+        description: 'Handcrafted muffler made from Wollen, can be customized.',
+        price: 799,
         image: '/mufflers.png',
         category: 'Zero Waste'
       },
@@ -308,7 +308,16 @@ const ShopPage = () => {
         price: 199,
         image: '/cutlery_set.png',
         category: 'Zero Waste'
-      }
+      },
+      {
+        id: 11,
+        name: 'Steel Water Bottle',
+        description: 'Stainless steel water bottle with leak-proof lid, 1 L capacity.',
+        price: 249,
+        image: '/Untitled design (35).png',
+        category: 'Steel',
+        tag: 'New'
+      },
     ];
     
     setTimeout(() => {
