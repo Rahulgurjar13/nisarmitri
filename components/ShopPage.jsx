@@ -278,7 +278,7 @@ const ShopPage = () => {
       },
       {
         id: 7,
-        name: 'Reusable Makeup Remover Pads(each of 70 rs)',
+        name: 'Reusable Makeup Remover Pads(each of 69 rs)',
         description: 'Reusable makeup remover pads .',
         price: 69 ,
         image: '/makeupremove.jpeg',
@@ -304,7 +304,7 @@ const ShopPage = () => {
       {
         id: 10,
         name: 'Zero Waste Cutlery Set',
-        description: 'Portable stainless steel cutlery set with fork, spoon , Stainless straw, straw cleaner and Bamboo tooth brush neatly packed in a durable cotton pouch.',
+        description: 'Portable stainless steel cutlery set with fork, spoon , Steel straw  , straw cleaner and bamboo tooth brush neatly packed in a durable cotton pouch.',
         price: 199,
         image: '/cutlery_set.png',
         category: 'Zero Waste'
@@ -312,7 +312,7 @@ const ShopPage = () => {
       {
         id: 11,
         name: 'Steel Water Bottle',
-        description: 'Stainless steel water bottle with leak-proof lid, (1 Liter) capacity.',
+        description: 'Stainless steel water bottle with leak-proof lid, (1 litre) capacity.',
         price: 249,
         image: '/Untitled design (35).png',
         category: 'Steel',
