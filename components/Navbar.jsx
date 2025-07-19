@@ -5,7 +5,7 @@ import axios from "axios";
 // Logo Component
 const GreenoLogo = () => (
   <div className="transition-transform duration-300 hover:scale-105">
-    <img src="/nisargmaitri.png" className="w-25 h-auto" alt="Greeno Logo" />
+    <img src="/logo2.jpeg" className="w-25 h-auto" alt="Greeno Logo" />
   </div>
 );
 

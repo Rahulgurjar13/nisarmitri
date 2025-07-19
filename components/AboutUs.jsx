@@ -504,7 +504,7 @@ const AboutPage = () => {
                   />
                 ))}
                 <a 
-                  href="https://www.youtube.com/@nisargmaitri" 
+                  href="https://www.youtube.com/@Nisarg_Maitri" 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block text-center bg-white text-[#1D3B30] rounded-lg p-3 text-sm font-medium shadow-sm border border-[#E6F0ED] transition-all hover:bg-[#E6F0ED] mt-4"

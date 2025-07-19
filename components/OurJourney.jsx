@@ -97,7 +97,7 @@ const OurJourney = () => {
           {/* Content side - Enhanced for mobile */}
           <div className="w-full lg:w-1/2 space-y-6 px-4 sm:px-0">
             <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
-              <h3 className="text-2xl sm:text-3xl font-bold text-[#2F6844] mb-4 font-serif">NISARGMAITRI</h3>
+              <h3 className="text-2xl sm:text-3xl font-bold text-[#2F6844] mb-4 font-serif">NISARG MAITRI</h3>
               <p className="text-gray-700 text-base sm:text-lg mb-4 leading-relaxed">
                 Connecting people with nature for a sustainable future. We promote eco-friendly practices and waste management solutions that preserve our planet for generations to come.
               </p>

@@ -5,7 +5,7 @@ import { MapPin, Phone, Mail, Clock } from 'lucide-react';
 const NisargmaitriLogo = () => (
   <div className="flex items-center">
     <img src="/nisargmaitri.png" className="h-12" alt="Nisargmaitri Logo" />
-    <span className="ml-3 text-xl font-bold tracking-wider">NISARGMAITRI</span>
+    <span className="ml-3 text-xl font-bold tracking-wider">NISARG MAITRI</span>
   </div>
 );
 
@@ -19,7 +19,7 @@ const Footer = () => {
           <div className="md:w-1/2 space-y-6">
             <NisargmaitriLogo />
             <p className="text-gray-100 max-w-md leading-relaxed">
-              Welcome to Nisargmaitri! We promote a deep bond with nature and sustainable 
+              Welcome to Nisarg maitri! We promote a deep bond with nature and sustainable 
               practices for a greener future. Join us in making a difference together!
             </p>
             <div className="flex space-x-5 pt-2">
