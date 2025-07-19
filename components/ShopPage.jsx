@@ -304,7 +304,7 @@ const ShopPage = () => {
       {
         id: 10,
         name: 'Zero Waste Cutlery Set',
-        description: 'Portable stainless steel cutlery set with knife, fork, spoon, chopsticks, and straw, neatly packed in a durable cotton pouch.',
+        description: 'Portable stainless steel cutlery set with fork, spoon , Stainless straw, straw cleaner and Bamboo tooth brush neatly packed in a durable cotton pouch.',
         price: 199,
         image: '/cutlery_set.png',
         category: 'Zero Waste'
@@ -312,7 +312,7 @@ const ShopPage = () => {
       {
         id: 11,
         name: 'Steel Water Bottle',
-        description: 'Stainless steel water bottle with leak-proof lid, 1 L capacity.',
+        description: 'Stainless steel water bottle with leak-proof lid, (1 Liter) capacity.',
         price: 249,
         image: '/Untitled design (35).png',
         category: 'Steel',
