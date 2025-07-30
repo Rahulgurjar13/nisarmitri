@@ -377,42 +377,71 @@ const ServicesPage = () => {
     {
       id: 1,
       title: 'Empowering Education: Gifting School Essentials',
-      description: 'Transformed vacant lot into thriving community garden',
+    
       details: 'We support schools by gifting essential school supplies and stationery etc. This initiative helps reduce the burden on families, encourages regular attendance, and creates a more inclusive and positive learning environment. By empowering students with the tools they need, we contribute to a stronger, more equitable education system.',
-      results: 'The garden now produces over 1,500 pounds of fresh produce annually and serves as an educational hub for the community.',
-      image: "https://www.agrifarming.in/wp-content/uploads/2019/02/History-of-Community-Gardens..jpg",
-      tags: ['Implementation', 'Community', 'Garden'],
-      category: 'garden'
+   
+      image: "https://givingforgood.org/_next/image?url=https%3A%2F%2Fapi.givingforgood.org%2Fuploads%2Fcauses%2F17194009033673iufm7hx4lxvqwjwp.jpg&w=1920&q=75",
+      tags: [],
+    
     },
     {
       id: 2,
-      title: 'School Recycling Program',
+      title: 'Water Pots for Street Animals',
       description: 'Implemented comprehensive recycling system at local school',
-      details: 'Developed and implemented a school-wide recycling program for Jefferson Elementary, including educational materials, sorting stations, and monitoring systems.',
-      results: 'Reduced school waste by 45% in the first year and engaged 100% of classrooms in recycling activities.',
+      details: 'We have initiated the Water Pots for Street Animals campaign in Greater Noida to provide clean drinking water for stray animals during extreme heat. Since many areas lack natural water sources, we install and regularly refill done by volunteers of Save Animal, Greater Noida. This compassionate step helps reduce animal suffering and promotes a more humane, responsible society.',
+    
       image: "https://www.ssvmws.com/blog/wp-content/uploads/2024/07/imgpsh_fullsize_anim-1.png",
-      tags: ['Education', 'Waste Management'],
-      category: 'waste'
+      tags: [],
+     
     },
     {
       id: 3,
-      title: 'Corporate Sustainability Plan',
-      description: 'Developed strategy reducing companys carbon footprint by 30%',
-      details: 'Collaborated with ABC Corporation to develop a comprehensive sustainability strategy, focusing on energy use, waste reduction, and supply chain improvements.',
-      results: 'Implemented changes led to 30% carbon footprint reduction and $250,000 annual savings in operational costs.',
+      title: 'Feeding Street Animals',
+      
+      details: 'We actively feed street animals, ensuring they receive regular, nutritious meals. This initiative supports the well-being of stray animals reduces hunger-related aggression, and fosters compassion within communities.',
       image: "https://assets.entrepreneur.com/content/3x2/2000/20151023074353-Untitled-1.jpeg",
-      tags: ['Consulting', 'Implementation'],
-      category: 'consulting'
+      tags: []
+     
     },
     {
       id: 4,
-      title: 'Neighborhood Clean-up Drive',
-      description: 'Organized community-wide clean-up collecting 500+ kg waste',
-      details: 'Coordinated a neighborhood-wide cleanup event involving 150+ volunteers from local schools, businesses, and community groups.',
-      results: 'Collected over 500kg of waste, properly disposed of 300kg of recyclables, and established ongoing monthly clean-up teams.',
+      title: 'Treatment to Street Animals',
+     
+      details: 'We provide vaccinations to street animals to protect them from deadly diseases like rabies, distemper, and parvovirus, contributing to both animal and public health. Additionally, we rescue and transport sick or injured animals to veterinary hospitals for timely treatment. These efforts ensure safer, healthier lives for strays and promote compassion and coexistence in urban communities.',
+     
       image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
-      tags: ['Community', 'Education'],
-      category: 'community'
+      tags: [],
+    
+    },
+    {
+      id: 5,
+      title: 'Reducing Textile Waste',
+     
+      details: 'We upcycle boutique waste into useful products like bags, accessories, and home décor items, creatively reducing textile waste. By repurposing fabric scraps, we promote sustainable fashion,  and prevent tons of cloth from ending up in landfills, encouraging a circular economy and mindful consumption.',
+     
+      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      tags: [],
+    
+    },
+    {
+      id: 6,
+      title: 'Bioenzyme and Seed Ball Making Workshops',
+     
+      details: 'We conducted Bioenzyme and Seed Ball Making Workshops in college to promote sustainable practices among students. Participants learned to create natural cleaners from kitchen waste and seed balls for reforestation efforts. These hands-on sessions encouraged waste-to-resource thinking, environmental responsibility, and active participation in greening urban spaces and restoring biodiversity.',
+     
+      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      tags: [],
+    
+    },
+    {
+      id: 7,
+      title: 'Supporting and Uplifting Lives in Old Age Homes',
+     
+      details: 'We support old age homes by providing essential supplies, organizing eatables, and spending quality time with residents through interactive activities and celebrations. Our efforts aim to bring comfort, companionship, and dignity to the elderly, ensuring they feel valued, cared for, and connected to a compassionate community.',
+     
+      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      tags: [],
+    
     },
   ];
 
