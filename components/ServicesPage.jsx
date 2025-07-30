@@ -299,53 +299,60 @@ const ServicesPage = () => {
   const services = [
     {
       id: 1,
-      title: 'Waste Management Consulting',
-      description: 'Expert guidance on implementing effective waste segregation, recycling, and reduction systems.',
+      title: 'Workshops & Seminars on Climate Change, Plastic Pollution, Biodiversity, etc.',
+      description: 'As Planet Warriors, we conduct engaging workshops and seminars on key environmental issues like climate change, plastic pollution, and biodiversity loss. These sessions raise awareness, foster eco-conscious thinking, and empower communities to take action. Using interactive tools such as visuals, activities, and real-life case studies, we tailor content for schools, colleges, housing societies, and corporates. Participants learn practical steps for sustainable living, waste reduction, and conservation.  These workshops align with global sustainability goals and nurture responsible citizens committed to protecting our planet for future generations.',
       icon: <BarChart4 size={18} />,
-      category: 'consulting',
+      
     },
     {
       id: 2,
-      title: 'Environmental Education',
-      description: 'Workshops designed to raise awareness about environmental issues and sustainable practices.',
+      title: 'Eco-Education Programs in schools and colleges',
+      description: 'Eco-Education Programs in schools and colleges aim to instill environmental awareness, responsibility, and sustainable practices among students. These programs integrate interactive lessons on climate change, biodiversity, waste management, and conservation into the academic setting. Through activities like green clubs, eco-quizzes, clean-up drives, and hands-on projects such as composting or tree planting, students learn the importance of protecting natural resources. We also train teachers and staff to incorporate sustainability into daily routines and curriculum. By engaging youth early, we nurture environmentally conscious citizens who can lead positive change and contribute to a greener, healthier future aligned with global sustainability goals.',
       icon: <GraduationCap size={18} />,
-      category: 'education',
+    
     },
     {
       id: 3,
-      title: 'Sustainable Living Workshops',
-      description: 'Practical workshops teaching how to adopt eco-friendly habits in daily life.',
+      title: 'Waste Management & Recycling Services',
+      description: 'Our Waste Management & Recycling Services focus on promoting responsible waste disposal and resource recovery within communities, institutions, and households. We conduct awareness drives, set up waste segregation systems, and organize recycling campaigns for plastics, e-waste, paper, and textiles. We also guide on setting up home and community composting for organic waste, reducing landfill burden. Through hands-on training and eco-audits, we help identify waste hotspots and offer sustainable alternatives. Our goal is to build zero-waste societies by encouraging reduce-reuse-recycle habits and linking communities with certified recyclers, contributing to cleaner environments and supporting a circular economy model. ',
       icon: <Leaf size={18} />,
-      category: 'education',
+  
     },
     {
       id: 4,
-      title: 'Corporate Sustainability',
-      description: 'Strategic consulting to help businesses reduce environmental footprint.',
+      title: 'Plastic-Free Lifestyle Tips',
+      description: 'Adopting a plastic-free lifestyle starts with simple swaps: use cloth bags instead of plastic, carry a reusable water bottle and cutlery, and choose glass or metal containers over plastic ones. Avoid single-use items like straws and packaged foods. We provide tailored eco-product recommendations that promote sustainable living, including biodegradable alternatives to plastic, eco-friendly refills, reusable home essentials, and low-impact personal care items. These suggestions help individuals and organizations reduce their environmental footprint without compromising convenience. By choosing products made from natural, compostable, or recycled materials, users support responsible consumption, minimize waste, and contribute to a greener, healthier planet through informed, conscious purchasing decisions.',
       icon: <Building size={18} />,
-      category: 'consulting',
+ 
     },
     {
       id: 5,
-      title: 'Community Engagement',
-      description: 'Initiative design to involve local communities in environmental conservation efforts.',
+      title: 'Zero-Waste Event Planning (eco-friendly weddings, events)',
+      description: 'Zero-Waste Event Planning focuses on organizing eco-friendly weddings and events that minimize environmental impact. We help clients reduce waste through reusable décor, digital invitations, local and organic catering, compostable tableware, and waste segregation systems. Emphasis is placed on reducing single-use items and partnering with sustainable vendors. These thoughtful choices not only lower the carbon footprint but also set a meaningful example of conscious celebration and responsible event management.',
       icon: <Users size={18} />,
-      category: 'community',
+  
     },
     {
       id: 6,
-      title: 'Green Space Development',
-      description: 'Design of sustainable green spaces in urban and rural areas to improve biodiversity.',
+      title: 'Urban Farming and Terrace Gardening Consultation ',
+      description: 'Our Urban Gardening and Terrace Farming consultancy empowers individuals and communities to grow their own food in limited spaces. We offer guidance on soil preparation, container selection, seasonal planting, composting, and organic pest control. Whether its a kitchen garden or a full-scale terrace farm, we help design sustainable setups that promote food security, reduce carbon footprint, and reconnect people with nature, turning unused urban spaces into green, productive oases.',
       icon: <PenTool size={18} />,
-      category: 'implementation',
+    
+    },
+    {
+      id: 7,
+      title: 'Our Sustainable Menstruation Awareness services',
+      description: 'Our Sustainable Menstruation Awareness services educate individuals, especially young women and girls, on eco-friendly menstrual choices. We promote the use of reusable products like menstrual cups, cloth pads, and period panty to reduce plastic waste and health risks. Through workshops, demonstrations, and community outreach, we break taboos, encourage hygienic practices, and empower menstruators to make informed, sustainable decisions that benefit both personal health and the environment.',
+      icon: <PenTool size={18} />,
+    
     },
   ];
 
   // Featured Services Data - simplified without external images
   const featuredServices = [
     {
-      title: 'Waste Management Solutions',
-      description: 'End-to-end waste management solutions helping communities reduce waste through efficient systems.',
+      title: 'Empowering Education: Gifting School Essentials',
+      description: 'We support schools by gifting essential school supplies and stationery etc. This initiative helps reduce the burden on families, encourages regular attendance, and creates a more inclusive and positive learning environment. By empowering students with the tools they need, we contribute to a stronger, more equitable education system.',
       icon: <BarChart4 size={20} />,
       features: [
         { title: 'Waste Audit & Analysis', description: 'Assessment of current waste patterns and opportunities.' },
@@ -369,9 +376,9 @@ const ServicesPage = () => {
   const projects = [
     {
       id: 1,
-      title: 'Community Garden Project',
+      title: 'Empowering Education: Gifting School Essentials',
       description: 'Transformed vacant lot into thriving community garden',
-      details: 'This project involved converting an abandoned 2-acre lot into a vibrant community garden. Working with local volunteers, we designed a space that includes vegetable gardens, native plant sections, and communal gathering areas.',
+      details: 'We support schools by gifting essential school supplies and stationery etc. This initiative helps reduce the burden on families, encourages regular attendance, and creates a more inclusive and positive learning environment. By empowering students with the tools they need, we contribute to a stronger, more equitable education system.',
       results: 'The garden now produces over 1,500 pounds of fresh produce annually and serves as an educational hub for the community.',
       image: "https://www.agrifarming.in/wp-content/uploads/2019/02/History-of-Community-Gardens..jpg",
       tags: ['Implementation', 'Community', 'Garden'],
@@ -483,20 +490,8 @@ const ServicesPage = () => {
           
           {/* Featured Services */}
           <div className="mb-8">
-            <h3 className="text-base font-semibold mb-4 text-emerald-700 border-b border-gray-200 pb-2">
-              Featured Services
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {featuredServices.map((service, index) => (
-                <FeaturedService
-                  key={index}
-                  title={service.title}
-                  description={service.description}
-                  icon={service.icon}
-                  features={service.features}
-                />
-              ))}
-            </div>
+           
+        
           </div>
           
           {/* All Services with Search and Filters */}
