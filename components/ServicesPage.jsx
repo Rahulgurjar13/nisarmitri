@@ -386,7 +386,7 @@ const ServicesPage = () => {
       description: 'Implemented comprehensive recycling system at local school',
       details: 'We have initiated the Water Pots for Street Animals campaign in Greater Noida to provide clean drinking water for stray animals during extreme heat. Since many areas lack natural water sources, we install and regularly refill done by volunteers of Save Animal, Greater Noida. This compassionate step helps reduce animal suffering and promotes a more humane, responsible society.',
     
-      image: "/WhatsApp Image 2025-07-26 at 5.54.03 PM.jpeg",
+      image: "/WhatsApp Image 2025-07-26 at 5.54.18 PM.jpeg",
       tags: [],
      
     },
