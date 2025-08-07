@@ -31,9 +31,7 @@ const ServiceCard = ({ icon, title, description, category }) => (
       <span className="inline-block bg-emerald-50 text-emerald-700 text-xs px-2 py-1 rounded-full">
         {category}
       </span>
-      <span className="text-emerald-600 text-sm flex items-center">
-        Details <ChevronRight size={14} className="ml-1" />
-      </span>
+    
     </div>
   </div>
 );

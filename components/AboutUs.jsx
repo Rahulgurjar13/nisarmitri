@@ -58,7 +58,7 @@ const FeaturedVideo = ({ title, description, videoId, thumbnail, likes, views })
               className="absolute inset-0 w-full h-full object-cover"
               onError={(e) => { e.target.src = 'https://via.placeholder.com/640x360?text=Video+Thumbnail'; }}
             />
-            <div className={`absolute inset-0 bg-[#1D3B30] transition-all duration-500 ${hovering ? 'opacity-80' : 'opacity-90'}`}></div>
+            <div className={`absolute inset-0 bg-[#1D3B30] transition-all duration-500 ${hovering ? 'opacity-2' : 'opacity-90'}`}></div>
             <button
               onClick={() => setPlaying(true)}
               className="absolute inset-0 flex flex-col items-center justify-center"
@@ -167,24 +167,24 @@ const AboutPage = () => {
   const youtubeVideos = [
     {
       id: "hk_-RwghbrI",
-      title: "Sustainable Living Practices",
-      description: "Learn effective ways to incorporate eco-friendly habits into your daily routine that can make a significant difference to our environment.",
+      title: "video 1",
+      description: "",
       thumbnail: "https://i.ytimg.com/vi/hk_-RwghbrI/sddefault.jpg",
       likes: "1.2K",
       views: "5.6K"
     },
     {
       id: "a_i11PxPuis",
-      title: "Urban Gardening Workshop",
-      description: "A comprehensive guide to starting your own sustainable garden in limited urban spaces, perfect for apartments and small homes.",
+      title: "video 2",
+      description: ".",
       thumbnail: "https://i.ytimg.com/vi/eMRRsl0RTtk/maxresdefault.jpg",
       likes: "850",
       views: "3.2K"
     },
     {
       id: "D-4-q8SslnQ",
-      title: "Waste Reduction Techniques",
-      description: "Innovative approaches to minimize waste production in households and offices through simple but effective daily practices.",
+      title: "video 3",
+      description: "",
       thumbnail: "https://i.ytimg.com/vi/R0MVAf_173g/hq720.jpg",
       likes: "2.1K",
       views: "8.9K"
