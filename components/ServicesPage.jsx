@@ -525,27 +525,14 @@ const ServicesPage = () => {
             
             <div className="mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
               <div className="relative w-full md:w-64">
-                <input
-                  type="text"
-                  placeholder="Search services..."
-                  className="w-full pl-8 pr-4 py-1.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+             
                 <div className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <Search size={14} />
+                  
                 </div>
               </div>
               
               <div className="flex overflow-x-auto gap-2 w-full md:w-auto no-scrollbar pb-1">
-                {serviceCategories.map((category) => (
-                  <FilterPill
-                    key={category.id}
-                    label={category.name}
-                    active={activeCategory === category.id}
-                    onClick={() => setActiveCategory(category.id)}
-                  />
-                ))}
+             
               </div>
             </div>
             
