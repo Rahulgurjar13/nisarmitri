@@ -222,7 +222,8 @@ const AboutPage = () => {
     name: "Dr. Seema Srivastava",
     role: "Founder & Environmental Specialist",
     bio: "With over 10 years of experience in environmental conservation, Seema founded Nisargmaitri with the vision of creating a sustainable future. Her passion for eco-friendly living and community empowerment drives the organization's mission.",
-    image: "/seema mam new.png", // Use relative path for public folder
+    image: "/bf498b21-6f40-41aa-b5c6-3f15c2c66fb9.jpeg", // Use relative path for public folder
+  
     socialLinks: [
       { 
         platform: "LinkedIn", 

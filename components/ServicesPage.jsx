@@ -281,11 +281,7 @@ const ServicesPage = () => {
 
   // Project Categories  
   const projectCategories = [
-    { id: 'all', name: 'All Projects' },
-    { id: 'waste', name: 'Waste Management' },
-    { id: 'education', name: 'Education' },
-    { id: 'garden', name: 'Green Spaces' },
-    { id: 'community', name: 'Community' },
+   
   ];
 
   // Simple placeholder images for local use
@@ -380,7 +376,7 @@ const ServicesPage = () => {
     
       details: 'We support schools by gifting essential school supplies and stationery etc. This initiative helps reduce the burden on families, encourages regular attendance, and creates a more inclusive and positive learning environment. By empowering students with the tools they need, we contribute to a stronger, more equitable education system.',
    
-      image: "https://givingforgood.org/_next/image?url=https%3A%2F%2Fapi.givingforgood.org%2Fuploads%2Fcauses%2F17194009033673iufm7hx4lxvqwjwp.jpg&w=1920&q=75",
+      image: "/WhatsApp Image 2025-07-26 at 5.54.59 PM.jpeg",
       tags: [],
     
     },
@@ -390,7 +386,7 @@ const ServicesPage = () => {
       description: 'Implemented comprehensive recycling system at local school',
       details: 'We have initiated the Water Pots for Street Animals campaign in Greater Noida to provide clean drinking water for stray animals during extreme heat. Since many areas lack natural water sources, we install and regularly refill done by volunteers of Save Animal, Greater Noida. This compassionate step helps reduce animal suffering and promotes a more humane, responsible society.',
     
-      image: "https://www.ssvmws.com/blog/wp-content/uploads/2024/07/imgpsh_fullsize_anim-1.png",
+      image: "/WhatsApp Image 2025-07-26 at 5.54.03 PM.jpeg",
       tags: [],
      
     },
@@ -399,7 +395,7 @@ const ServicesPage = () => {
       title: 'Feeding Street Animals',
       
       details: 'We actively feed street animals, ensuring they receive regular, nutritious meals. This initiative supports the well-being of stray animals reduces hunger-related aggression, and fosters compassion within communities.',
-      image: "https://assets.entrepreneur.com/content/3x2/2000/20151023074353-Untitled-1.jpeg",
+      image: "/WhatsApp Image 2025-07-26 at 5.55.08 PM.jpeg",
       tags: []
      
     },
@@ -409,7 +405,7 @@ const ServicesPage = () => {
      
       details: 'We provide vaccinations to street animals to protect them from deadly diseases like rabies, distemper, and parvovirus, contributing to both animal and public health. Additionally, we rescue and transport sick or injured animals to veterinary hospitals for timely treatment. These efforts ensure safer, healthier lives for strays and promote compassion and coexistence in urban communities.',
      
-      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      image: "/WhatsApp Image 2025-07-26 at 5.55.05 PM.jpeg",
       tags: [],
     
     },
@@ -419,7 +415,7 @@ const ServicesPage = () => {
      
       details: 'We upcycle boutique waste into useful products like bags, accessories, and home décor items, creatively reducing textile waste. By repurposing fabric scraps, we promote sustainable fashion,  and prevent tons of cloth from ending up in landfills, encouraging a circular economy and mindful consumption.',
      
-      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      image: "/WhatsApp Image 2025-07-26 at 5.55.01 PM.jpeg",
       tags: [],
     
     },
@@ -429,7 +425,7 @@ const ServicesPage = () => {
      
       details: 'We conducted Bioenzyme and Seed Ball Making Workshops in college to promote sustainable practices among students. Participants learned to create natural cleaners from kitchen waste and seed balls for reforestation efforts. These hands-on sessions encouraged waste-to-resource thinking, environmental responsibility, and active participation in greening urban spaces and restoring biodiversity.',
      
-      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      image: "/WhatsApp Image 2025-07-26 at 5.54.39 PM.jpeg",
       tags: [],
     
     },
@@ -439,7 +435,7 @@ const ServicesPage = () => {
      
       details: 'We support old age homes by providing essential supplies, organizing eatables, and spending quality time with residents through interactive activities and celebrations. Our efforts aim to bring comfort, companionship, and dignity to the elderly, ensuring they feel valued, cared for, and connected to a compassionate community.',
      
-      image: "https://surfingindia.net/wp-content/uploads/2019/09/Mantra-Beach-Clean-up-Sep-2019.webp",
+      image: "/WhatsApp Image 2025-07-26 at 5.55.03 PM.jpeg",
       tags: [],
     
     },
