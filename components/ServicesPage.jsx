@@ -505,7 +505,7 @@ const ServicesPage = () => {
       <section ref={servicesRef} className={`py-8 ${activeTab === 'services' ? 'block' : 'hidden'}`}>
         <div className="container mx-auto px-4">
           <h2 className="text-lg font-bold mb-1 text-emerald-800">
-            Our Services
+            Our Works
           </h2>
           <p className="text-gray-600 mb-6 text-sm">
             We provide a range of environmental services to help communities and organizations achieve sustainability goals.
@@ -519,9 +519,7 @@ const ServicesPage = () => {
           
           {/* All Services with Search and Filters */}
           <div>
-            <h3 className="text-base font-semibold mb-4 text-emerald-700 border-b border-gray-200 pb-2">
-              All Services
-            </h3>
+          
             
             <div className="mb-4 flex flex-col md:flex-row items-center justify-between gap-3">
               <div className="relative w-full md:w-64">
