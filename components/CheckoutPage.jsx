@@ -46,7 +46,7 @@ const CheckoutPage = () => {
       pincode: '201310',
       country: 'India',
     },
-    shippingMethod: { type: 'Standard', cost: 80 },
+    shippingMethod: { type: 'Standard', cost: 50 },
     coupon: { code: '', discount: 0 },
     gstDetails: { gstNumber: '', state: 'Uttar Pradesh', city: 'Gautam Buddha Nagar' },
     paymentMethod: 'COD',
@@ -62,10 +62,12 @@ const CheckoutPage = () => {
 
   // Calculate shipping cost based on backend logic
   const calculateShippingCost = (subtotal) => {
-    if (subtotal >= 800) return 0;
+    if (subtotal >= 500) return 0;
     if (subtotal >= 500) return 50;
-    return 80; // Updated default shipping cost to match initial formData
+    return 50; // Updated default shipping cost to match initial formData
   };
+
+
 
   // Update shipping cost and coupon discount
   useEffect(() => {
