@@ -390,6 +390,30 @@ const ShopPage = () => {
   return (
     <div className="bg-gray-50 min-h-screen font-serif">
       <Navbar />
+      
+      {/* Delivery Information Banner */}
+      <div className="bg-gradient-to-r from-[#1A3329] to-[#2F6844] text-white py-3 shadow-lg">
+        <div className="container mx-auto px-6">
+          <div className="flex items-center justify-center">
+            <div className="flex items-center space-x-2 text-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <span className="font-medium text-sm md:text-base">
+                🚚 <strong>FREE DELIVERY</strong> on orders above ₹500 | 
+                <span className="mx-2">•</span>
+                ₹50 delivery charge for orders under ₹500 | 
+                <span className="mx-2">•</span>
+                <strong>All Over India</strong> 🇮🇳
+              </span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h1.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H19a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="container mx-auto px-6 py-12">
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-3xl font-bold text-gray-900">Shop All Products</h2>
