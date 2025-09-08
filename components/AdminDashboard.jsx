@@ -486,16 +486,48 @@ const AdminDashboard = () => {
         },
       });
 
-      let totalY = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(12);
-      autoTable(doc, {
-        startY: totalY,
-        body: [
-          ["Grand Total", (order.total || 0).toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹")],
-        ],
-        styles: { fontSize: 11, cellPadding: 3, fontStyle: "bold", halign: "right" },
-        columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 40 } },
-      });
+    let totalY = doc.lastAutoTable.finalY + 10;
+doc.setFontSize(12);
+
+// Calculate subtotal
+const subtotal = (order.items || []).reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
+const shippingCost = order.shippingMethod?.cost || 0;
+const couponDiscount = order.coupon?.discount || 0;
+
+// Order summary table
+const summaryBody = [
+  ["Subtotal", subtotal.toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹")],
+  ["Shipping (" + (order.shippingMethod?.type || "Standard") + ")", 
+   shippingCost === 0 ? "Free" : shippingCost.toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹")],
+];
+
+if (order.coupon?.code && couponDiscount > 0) {
+  summaryBody.push([
+    "Coupon (" + order.coupon.code + ")",
+    "-" + couponDiscount.toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹")
+  ]);
+}
+
+summaryBody.push([
+  "Grand Total",
+  (order.total || 0).toLocaleString("en-IN", { style: "currency", currency: "INR" }).replace("INR", "₹")
+]);
+
+autoTable(doc, {
+  startY: totalY,
+  body: summaryBody,
+  styles: { fontSize: 11, cellPadding: 3, halign: "right" },
+  columnStyles: { 0: { cellWidth: 140 }, 1: { cellWidth: 40 } },
+  didParseCell: function (data) {
+    if (data.row.index === summaryBody.length - 1) { // Last row (Grand Total)
+      data.cell.styles.fontStyle = 'bold';
+      data.cell.styles.fillColor = [245, 245, 245];
+    }
+    if (order.coupon?.code && data.row.index === summaryBody.length - 2 && summaryBody.length > 3) { // Coupon row
+      data.cell.styles.textColor = [0, 128, 0]; // Green color for discount
+    }
+  }
+});
 
       let paymentY = doc.lastAutoTable.finalY + 10;
       doc.setFontSize(12);
@@ -766,21 +798,39 @@ const AdminDashboard = () => {
                       <p className="text-sm sm:text-base">Shipping Method: {selectedOrder.shippingMethod?.type || "N/A"}</p>
                     </div>
                   </div>
-                  <div className="mt-4 sm:mt-6">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                      Items Purchased
-                    </h3>
-                    {selectedOrder.items.map((item, index) => (
-                      <div key={index} className="flex justify-between py-2 border-b text-sm sm:text-base">
-                        <span>{item.name} (x{item.quantity})</span>
-                        <span>₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-bold mt-4 text-sm sm:text-base">
-                      <span>Total</span>
-                      <span>₹{selectedOrder.total.toLocaleString("en-IN")}</span>
-                    </div>
-                  </div>
+                 <div className="mt-4 sm:mt-6">
+  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+    Items Purchased
+  </h3>
+  {selectedOrder.items.map((item, index) => (
+    <div key={index} className="flex justify-between py-2 border-b text-sm sm:text-base">
+      <span>{item.name} (x{item.quantity})</span>
+      <span>₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
+    </div>
+  ))}
+  
+  {/* Order Summary */}
+  <div className="mt-4 space-y-2">
+    <div className="flex justify-between text-sm sm:text-base">
+      <span>Subtotal</span>
+      <span>₹{selectedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString("en-IN")}</span>
+    </div>
+    <div className="flex justify-between text-sm sm:text-base">
+      <span>Shipping ({selectedOrder.shippingMethod?.type || 'Standard'})</span>
+      <span>{selectedOrder.shippingMethod?.cost === 0 ? 'Free' : `₹${selectedOrder.shippingMethod?.cost?.toLocaleString("en-IN") || '0'}`}</span>
+    </div>
+    {selectedOrder.coupon?.code && selectedOrder.coupon?.discount > 0 && (
+      <div className="flex justify-between text-sm sm:text-base text-green-600">
+        <span>Coupon ({selectedOrder.coupon.code})</span>
+        <span>-₹{selectedOrder.coupon.discount.toLocaleString("en-IN")}</span>
+      </div>
+    )}
+    <div className="flex justify-between font-bold pt-2 border-t text-sm sm:text-base">
+      <span>Total</span>
+      <span>₹{selectedOrder.total.toLocaleString("en-IN")}</span>
+    </div>
+  </div>
+</div>
                   <div className="mt-4 sm:mt-6">
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       Payment Information
